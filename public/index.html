@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turquoise CRM</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>🟦 Turquoise CRM</h1>
+    <p>Gestion de vos contacts clients</p>
+  </header>
+
+  <main>
+    <section class="form-section">
+      <h2 id="form-title">Ajouter un contact</h2>
+      <form id="contact-form">
+        <input type="hidden" id="contact-id" />
+        <div class="form-row">
+          <label for="name">Nom *</label>
+          <input type="text" id="name" placeholder="Nom complet" required />
+        </div>
+        <div class="form-row">
+          <label for="email">Email *</label>
+          <input type="email" id="email" placeholder="email@exemple.com" required />
+        </div>
+        <div class="form-row">
+          <label for="phone">Téléphone</label>
+          <input type="text" id="phone" placeholder="06 00 00 00 00" />
+        </div>
+        <div class="form-row">
+          <label for="company">Entreprise</label>
+          <input type="text" id="company" placeholder="Nom de l'entreprise" />
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="submit-btn">Ajouter</button>
+          <button type="button" id="cancel-btn" style="display:none">Annuler</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="list-section">
+      <h2>Contacts (<span id="contact-count">0</span>)</h2>
+      <div id="contact-list"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
