@@ -1,0 +1,10 @@
+## Désactive explicitement Netlify Blobs pour éviter l'erreur MissingBlobsEnvironmentError
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Plugin Next.js Netlify
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Désactive les blobs (aucune section [blobs] ou plugin blobs)
