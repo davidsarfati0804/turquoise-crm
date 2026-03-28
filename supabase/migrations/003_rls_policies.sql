@@ -1,344 +1,295 @@
 -- =====================================================
 -- TURQUOISE CRM - Row Level Security (RLS) Policies
 -- =====================================================
+-- Version: 1.0
+-- Date: 2026-03-23
+-- Description: Politiques de sécurité pour le CRM
 
--- Enable RLS on all tables
-ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE permissions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE role_permissions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE room_types ENABLE ROW LEVEL SECURITY;
-ALTER TABLE event_room_pricing ENABLE ROW LEVEL SECURITY;
-ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
-ALTER TABLE client_files ENABLE ROW LEVEL SECURITY;
-ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payment_links ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE internal_notes ENABLE ROW LEVEL SECURITY;
+-- =====================================================
+-- ACTIVER RLS SUR TOUTES LES TABLES
+-- =====================================================
+
+ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE opportunites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE devis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lignes_devis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE factures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lignes_factures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE produits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tags_entites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profils_utilisateurs ENABLE ROW LEVEL SECURITY;
 
 -- =====================================================
 -- HELPER FUNCTIONS
 -- =====================================================
 
--- Check if user is authenticated
-CREATE OR REPLACE FUNCTION auth.user_id() 
-RETURNS UUID AS $$
-  SELECT COALESCE(
-    auth.uid(),
-    (current_setting('request.jwt.claims', true)::json->>'sub')::uuid
-  );
-$$ LANGUAGE SQL STABLE;
-
--- Get current user's role
-CREATE OR REPLACE FUNCTION get_user_role()
-RETURNS UUID AS $$
-  SELECT role_id FROM users WHERE id = auth.user_id();
-$$ LANGUAGE SQL STABLE SECURITY DEFINER;
-
--- Check if user has permission
-CREATE OR REPLACE FUNCTION has_permission(permission_code VARCHAR)
-RETURNS BOOLEAN AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM users u
-    JOIN role_permissions rp ON rp.role_id = u.role_id
-    JOIN permissions p ON p.id = rp.permission_id
-    WHERE u.id = auth.user_id()
-    AND p.code = permission_code
-    AND u.is_active = true
-  );
-$$ LANGUAGE SQL STABLE SECURITY DEFINER;
-
--- Check if user is admin
+-- Vérifier si l'utilisateur est admin
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1
-    FROM users u
-    JOIN roles r ON r.id = u.role_id
-    WHERE u.id = auth.user_id()
-    AND r.name = 'admin'
-    AND u.is_active = true
+    FROM profils_utilisateurs
+    WHERE id = auth.uid()
+    AND role = 'admin'
+    AND actif = true
+  );
+$$ LANGUAGE SQL STABLE SECURITY DEFINER;
+
+-- Vérifier si l'utilisateur est actif
+CREATE OR REPLACE FUNCTION is_active_user()
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM profils_utilisateurs
+    WHERE id = auth.uid()
+    AND actif = true
   );
 $$ LANGUAGE SQL STABLE SECURITY DEFINER;
 
 -- =====================================================
--- USERS TABLE POLICIES
+-- PROFILS UTILISATEURS POLICIES
 -- =====================================================
 
--- Users can view their own profile
+-- Les utilisateurs peuvent voir leur propre profil
 CREATE POLICY "Users can view own profile"
-  ON users FOR SELECT
-  USING (id = auth.user_id());
+  ON profils_utilisateurs FOR SELECT
+  USING (id = auth.uid());
 
--- Users with permission can view all users
-CREATE POLICY "Users with permission can view all users"
-  ON users FOR SELECT
-  USING (has_permission('view_users'));
+-- Les utilisateurs actifs peuvent voir les autres profils
+CREATE POLICY "Active users can view all profiles"
+  ON profils_utilisateurs FOR SELECT
+  USING (is_active_user());
 
--- Users can update their own profile (limited fields)
+-- Les utilisateurs peuvent mettre à jour leur propre profil (sauf le rôle)
 CREATE POLICY "Users can update own profile"
-  ON users FOR UPDATE
-  USING (id = auth.user_id())
+  ON profils_utilisateurs FOR UPDATE
+  USING (id = auth.uid())
   WITH CHECK (
-    id = auth.user_id() AND
-    role_id = (SELECT role_id FROM users WHERE id = auth.user_id()) -- Cannot change own role
+    id = auth.uid() AND
+    role = (SELECT role FROM profils_utilisateurs WHERE id = auth.uid()) -- Ne peut pas changer son propre rôle
   );
 
--- Only admins can insert/delete users
-CREATE POLICY "Admins can manage users"
-  ON users FOR ALL
+-- Les admins peuvent tout gérer
+CREATE POLICY "Admins can manage all profiles"
+  ON profils_utilisateurs FOR ALL
   USING (is_admin())
   WITH CHECK (is_admin());
 
 -- =====================================================
--- ROLES & PERMISSIONS POLICIES
+-- CLIENTS POLICIES
 -- =====================================================
 
--- Everyone can view roles and permissions (needed for UI)
-CREATE POLICY "Authenticated users can view roles"
-  ON roles FOR SELECT
-  TO authenticated
-  USING (true);
+CREATE POLICY "Active users can view clients"
+  ON clients FOR SELECT
+  USING (is_active_user());
 
-CREATE POLICY "Authenticated users can view permissions"
-  ON permissions FOR SELECT
-  TO authenticated
-  USING (true);
+CREATE POLICY "Active users can create clients"
+  ON clients FOR INSERT
+  WITH CHECK (is_active_user());
 
-CREATE POLICY "Authenticated users can view role_permissions"
-  ON role_permissions FOR SELECT
-  TO authenticated
-  USING (true);
+CREATE POLICY "Active users can update clients"
+  ON clients FOR UPDATE
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
 
--- Only admins can manage roles and permissions
-CREATE POLICY "Admins can manage roles"
-  ON roles FOR ALL
-  USING (is_admin())
-  WITH CHECK (is_admin());
-
-CREATE POLICY "Admins can manage permissions"
-  ON permissions FOR ALL
-  USING (is_admin())
-  WITH CHECK (is_admin());
-
-CREATE POLICY "Admins can manage role_permissions"
-  ON role_permissions FOR ALL
-  USING (is_admin())
-  WITH CHECK (is_admin());
+CREATE POLICY "Admins can delete clients"
+  ON clients FOR DELETE
+  USING (is_admin());
 
 -- =====================================================
--- EVENTS POLICIES
+-- CONTACTS POLICIES
 -- =====================================================
 
-CREATE POLICY "Users can view events"
-  ON events FOR SELECT
-  USING (has_permission('view_events'));
+CREATE POLICY "Active users can view contacts"
+  ON contacts FOR SELECT
+  USING (is_active_user());
 
-CREATE POLICY "Users can create events"
-  ON events FOR INSERT
-  WITH CHECK (has_permission('create_events'));
-
-CREATE POLICY "Users can update events"
-  ON events FOR UPDATE
-  USING (has_permission('edit_events'))
-  WITH CHECK (has_permission('edit_events'));
-
-CREATE POLICY "Users can delete events"
-  ON events FOR DELETE
-  USING (has_permission('delete_events'));
+CREATE POLICY "Active users can manage contacts"
+  ON contacts FOR ALL
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
 
 -- =====================================================
--- ROOM TYPES & PRICING POLICIES
+-- OPPORTUNITES POLICIES
 -- =====================================================
 
-CREATE POLICY "Users can view room types"
-  ON room_types FOR SELECT
-  USING (has_permission('view_events'));
+CREATE POLICY "Active users can view opportunites"
+  ON opportunites FOR SELECT
+  USING (is_active_user());
 
-CREATE POLICY "Users can manage room types"
-  ON room_types FOR ALL
-  USING (has_permission('manage_room_pricing'))
-  WITH CHECK (has_permission('manage_room_pricing'));
+CREATE POLICY "Active users can create opportunites"
+  ON opportunites FOR INSERT
+  WITH CHECK (is_active_user());
 
-CREATE POLICY "Users can view pricing"
-  ON event_room_pricing FOR SELECT
-  USING (has_permission('view_events'));
-
-CREATE POLICY "Users can manage pricing"
-  ON event_room_pricing FOR ALL
-  USING (has_permission('manage_room_pricing'))
-  WITH CHECK (has_permission('manage_room_pricing'));
-
--- =====================================================
--- LEADS POLICIES
--- =====================================================
-
-CREATE POLICY "Users can view leads"
-  ON leads FOR SELECT
-  USING (has_permission('view_leads'));
-
-CREATE POLICY "Users can create leads"
-  ON leads FOR INSERT
-  WITH CHECK (has_permission('create_leads'));
-
-CREATE POLICY "Users can update leads"
-  ON leads FOR UPDATE
-  USING (has_permission('edit_leads'))
-  WITH CHECK (has_permission('edit_leads'));
-
-CREATE POLICY "Users can delete leads"
-  ON leads FOR DELETE
-  USING (has_permission('delete_leads'));
-
--- =====================================================
--- CLIENT FILES POLICIES
--- =====================================================
-
-CREATE POLICY "Users can view client files"
-  ON client_files FOR SELECT
-  USING (has_permission('view_client_files'));
-
-CREATE POLICY "Users can create client files"
-  ON client_files FOR INSERT
-  WITH CHECK (has_permission('create_client_files'));
-
-CREATE POLICY "Users can update client files"
-  ON client_files FOR UPDATE
-  USING (has_permission('edit_client_files'))
-  WITH CHECK (has_permission('edit_client_files'));
-
-CREATE POLICY "Users can delete client files"
-  ON client_files FOR DELETE
-  USING (has_permission('delete_client_files'));
-
--- =====================================================
--- PARTICIPANTS POLICIES
--- =====================================================
-
-CREATE POLICY "Users can view participants"
-  ON participants FOR SELECT
+CREATE POLICY "Users can update their assigned opportunites"
+  ON opportunites FOR UPDATE
   USING (
-    EXISTS (
-      SELECT 1 FROM client_files cf
-      WHERE cf.id = participants.client_file_id
-      AND has_permission('view_client_files')
-    )
-  );
-
-CREATE POLICY "Users can manage participants"
-  ON participants FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM client_files cf
-      WHERE cf.id = participants.client_file_id
-      AND has_permission('edit_client_files')
-    )
+    is_active_user() AND
+    (assigne_a = auth.uid() OR is_admin())
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM client_files cf
-      WHERE cf.id = participants.client_file_id
-      AND has_permission('edit_client_files')
-    )
+    is_active_user() AND
+    (assigne_a = auth.uid() OR is_admin())
   );
 
+CREATE POLICY "Admins can delete opportunites"
+  ON opportunites FOR DELETE
+  USING (is_admin());
+
 -- =====================================================
--- PAYMENT LINKS POLICIES
+-- ACTIVITES POLICIES
 -- =====================================================
 
-CREATE POLICY "Users can view payment links"
-  ON payment_links FOR SELECT
-  USING (has_permission('view_payments'));
+CREATE POLICY "Active users can view activites"
+  ON activites FOR SELECT
+  USING (is_active_user());
 
-CREATE POLICY "Users can create payment links"
-  ON payment_links FOR INSERT
-  WITH CHECK (has_permission('create_payment_links'));
-
-CREATE POLICY "Users can update payment links"
-  ON payment_links FOR UPDATE
+CREATE POLICY "Users can manage their assigned activites"
+  ON activites FOR ALL
   USING (
-    has_permission('create_payment_links') OR
-    has_permission('mark_payment_as_paid')
+    is_active_user() AND
+    (assigne_a = auth.uid() OR is_admin())
   )
   WITH CHECK (
-    has_permission('create_payment_links') OR
-    has_permission('mark_payment_as_paid')
+    is_active_user() AND
+    (assigne_a = auth.uid() OR is_admin())
   );
 
 -- =====================================================
--- INVOICES POLICIES
+-- DEVIS POLICIES
 -- =====================================================
 
-CREATE POLICY "Users can view invoices"
-  ON invoices FOR SELECT
-  USING (has_permission('view_invoices'));
+CREATE POLICY "Active users can view devis"
+  ON devis FOR SELECT
+  USING (is_active_user());
 
-CREATE POLICY "Users can manage invoices"
-  ON invoices FOR ALL
-  USING (has_permission('manage_invoices'))
-  WITH CHECK (has_permission('manage_invoices'));
-
--- =====================================================
--- ACTIVITY LOGS POLICIES
--- =====================================================
-
-CREATE POLICY "Users can view activity logs"
-  ON activity_logs FOR SELECT
-  USING (has_permission('view_activity_logs'));
-
--- System can always insert activity logs
-CREATE POLICY "System can insert activity logs"
-  ON activity_logs FOR INSERT
-  WITH CHECK (true);
+CREATE POLICY "Active users can manage devis"
+  ON devis FOR ALL
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
 
 -- =====================================================
--- INTERNAL NOTES POLICIES
+-- LIGNES DEVIS POLICIES
 -- =====================================================
 
-CREATE POLICY "Users can view internal notes"
-  ON internal_notes FOR SELECT
-  USING (
-    CASE entity_type
-      WHEN 'event' THEN has_permission('view_events')
-      WHEN 'lead' THEN has_permission('view_leads')
-      WHEN 'client_file' THEN has_permission('view_client_files')
-      ELSE false
-    END
-  );
+CREATE POLICY "Active users can view lignes_devis"
+  ON lignes_devis FOR SELECT
+  USING (is_active_user());
 
-CREATE POLICY "Users can create internal notes"
-  ON internal_notes FOR INSERT
-  WITH CHECK (has_permission('create_internal_notes'));
+CREATE POLICY "Active users can manage lignes_devis"
+  ON lignes_devis FOR ALL
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
+
+-- =====================================================
+-- FACTURES POLICIES
+-- =====================================================
+
+CREATE POLICY "Active users can view factures"
+  ON factures FOR SELECT
+  USING (is_active_user());
+
+CREATE POLICY "Active users can manage factures"
+  ON factures FOR ALL
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
+
+-- =====================================================
+-- LIGNES FACTURES POLICIES
+-- =====================================================
+
+CREATE POLICY "Active users can view lignes_factures"
+  ON lignes_factures FOR SELECT
+  USING (is_active_user());
+
+CREATE POLICY "Active users can manage lignes_factures"
+  ON lignes_factures FOR ALL
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
+
+-- =====================================================
+-- PRODUITS POLICIES
+-- =====================================================
+
+CREATE POLICY "Active users can view produits"
+  ON produits FOR SELECT
+  USING (is_active_user());
+
+CREATE POLICY "Active users can manage produits"
+  ON produits FOR ALL
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
+
+-- =====================================================
+-- DOCUMENTS POLICIES
+-- =====================================================
+
+CREATE POLICY "Active users can view documents"
+  ON documents FOR SELECT
+  USING (is_active_user());
+
+CREATE POLICY "Active users can manage documents"
+  ON documents FOR ALL
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
+
+-- =====================================================
+-- NOTES POLICIES
+-- =====================================================
+
+CREATE POLICY "Active users can view notes"
+  ON notes FOR SELECT
+  USING (is_active_user());
+
+CREATE POLICY "Users can create notes"
+  ON notes FOR INSERT
+  WITH CHECK (is_active_user());
 
 CREATE POLICY "Users can update their own notes"
-  ON internal_notes FOR UPDATE
+  ON notes FOR UPDATE
   USING (
-    created_by_user_id = auth.user_id() AND
-    has_permission('edit_internal_notes')
+    cree_par = auth.uid() OR is_admin()
   )
   WITH CHECK (
-    created_by_user_id = auth.user_id() AND
-    has_permission('edit_internal_notes')
+    cree_par = auth.uid() OR is_admin()
   );
-
-CREATE POLICY "Admins can update any notes"
-  ON internal_notes FOR UPDATE
-  USING (is_admin())
-  WITH CHECK (is_admin());
 
 CREATE POLICY "Users can delete their own notes"
-  ON internal_notes FOR DELETE
+  ON notes FOR DELETE
   USING (
-    created_by_user_id = auth.user_id() AND
-    has_permission('delete_internal_notes')
+    cree_par = auth.uid() OR is_admin()
   );
 
-CREATE POLICY "Admins can delete any notes"
-  ON internal_notes FOR DELETE
-  USING (is_admin());
+-- =====================================================
+-- TAGS POLICIES
+-- =====================================================
+
+CREATE POLICY "Active users can view tags"
+  ON tags FOR SELECT
+  USING (is_active_user());
+
+CREATE POLICY "Active users can manage tags"
+  ON tags FOR ALL
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
+
+-- =====================================================
+-- TAGS ENTITES POLICIES
+-- =====================================================
+
+CREATE POLICY "Active users can view tags_entites"
+  ON tags_entites FOR SELECT
+  USING (is_active_user());
+
+CREATE POLICY "Active users can manage tags_entites"
+  ON tags_entites FOR ALL
+  USING (is_active_user())
+  WITH CHECK (is_active_user());
 
 -- =====================================================
 -- GRANT ACCESS TO AUTHENTICATED USERS
@@ -348,3 +299,7 @@ GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
+
+-- =====================================================
+-- FIN DES POLITIQUES RLS
+-- =====================================================

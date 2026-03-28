@@ -1,163 +1,142 @@
-# 🚀 GUIDE DE SETUP — 5 MINUTES CHRONO
+# 🚀 Guide de Configuration (5 minutes)
 
-> **Tout est déjà prêt !** Vous n'avez que 4 actions ultra-simples à faire.
+Ce guide vous permet de lancer **Turquoise CRM** en 5 étapes simples.
 
 ---
 
-## ✅ ÉTAPE 1 : Créer un compte Supabase (2 minutes)
+## ✅ Prérequis
+
+- **Node.js 18+** installé ([télécharger](https://nodejs.org/))
+- **Compte Supabase** gratuit ([créer un compte](https://supabase.com))
+
+---
+
+## 📋 Étapes de Configuration
+
+### **1. Créer un projet Supabase**
 
 1. Allez sur [supabase.com](https://supabase.com)
-2. Cliquez **"Start your project"**
-3. Connectez-vous avec GitHub (ou créez un compte)
-4. Cliquez **"New project"**
-5. Remplissez :
-   - **Name** : `turquoise-crm`
-   - **Database Password** : inventez un mot de passe fort (notez-le quelque part)
-   - **Region** : choisissez le plus proche (ex: `Europe West (Paris)`)
-6. Cliquez **"Create new project"**
-7. ⏳ Attendez 2 minutes (le temps que Supabase provisionne la base de données)
+2. Cliquez sur **"New project"**
+3. Choisissez un nom (ex: `turquoise-crm`)
+4. Définissez un mot de passe de base de données (⚠️ **sauvegardez-le !**)
+5. Choisissez une région (ex: `eu-west`)
+6. Cliquez sur **"Create project"** (⏱️ 2 minutes d'attente)
 
 ---
 
-## ✅ ÉTAPE 2 : Copier les clés API (30 secondes)
+### **2. Copier les clés API**
 
-Dans votre projet Supabase :
+1. Dans Supabase, allez dans **Settings** → **API**
+2. Copiez ces deux valeurs :
+   - **Project URL** (ex: `https://xxxxx.supabase.co`)
+   - **Publishable key** (anon key) (commence par `eyJ...`)
 
-1. Allez dans **Settings** (⚙️ en bas à gauche) → **API**
-2. Vous verrez :
-   - **Project URL** : `https://xxxxxxxxxxxxx.supabase.co`
-   - **anon public** : `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
-3. **Copiez ces 2 valeurs**
+3. Créez un fichier `.env.local` à la racine du projet :
 
-Maintenant dans VS Code :
-
-1. Ouvrez le fichier `.env.local.example`
-2. **Dupliquez-le** et renommez la copie en `.env.local`
-3. Collez vos valeurs :
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://votre-projet.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...votre-cle-anon
 ```
 
-4. Sauvegardez (Cmd+S / Ctrl+S)
-
-✅ **Terminé !** Le fichier `.env.local` ne sera jamais commité sur GitHub (déjà dans `.gitignore`).
+⚠️ **Remplacez les valeurs par vos propres clés !**
 
 ---
 
-## ✅ ÉTAPE 3 : Exécuter les migrations SQL (2 minutes)
+### **3. Exécuter les migrations SQL**
 
-Dans Supabase :
+1. Dans Supabase, allez dans **SQL Editor**
+2. Cliquez sur **"New query"**
+3. Copiez-collez le contenu de chaque fichier SQL dans l'ordre :
+   - `supabase/migrations/001_initial_schema.sql`
+   - `supabase/migrations/002_seed_data.sql`
+   - `supabase/migrations/003_rls_policies.sql`
+4. Cliquez sur **"Run"** après chaque fichier
 
-1. Allez dans **SQL Editor** (icône ⚡ dans le menu)
-2. Cliquez **"New query"**
-3. Ouvrez le fichier `supabase/migrations/001_initial_schema.sql` dans VS Code
-4. **Copiez tout le contenu** (Cmd+A puis Cmd+C)
-5. **Collez dans l'éditeur SQL** de Supabase
-6. Cliquez **"Run"** (bouton vert en bas à droite)
-7. ✅ Vous devriez voir "Success. No rows returned"
-
-Répétez pour les 2 autres fichiers :
-
-- `supabase/migrations/002_seed_data.sql`
-- `supabase/migrations/003_rls_policies.sql`
-
-✅ **Terminé !** Votre base de données est créée avec données de démo.
+✅ Votre base de données est maintenant créée avec 14 tables !
 
 ---
 
-## ✅ ÉTAPE 4 : Créer votre premier utilisateur admin (1 minute)
+### **4. Créer un utilisateur admin**
 
-Dans Supabase :
-
-1. Allez dans **Authentication** → **Users**
-2. Cliquez **"Add user"** → **"Create new user"**
+1. Dans Supabase, allez dans **Authentication** → **Users**
+2. Cliquez sur **"Add user"** → **"Create new user"**
 3. Remplissez :
-   - **Email** : votre email (ex: `admin@turquoise-crm.com`)
-   - **Password** : inventez un mot de passe (vous le retaperez pour vous connecter)
-   - ✅ **Auto Confirm User** : cochez cette case
-4. Cliquez **"Create user"**
-5. Notez l'**UUID** du user (vous en aurez besoin)
-
-Maintenant, retournez dans **SQL Editor** :
-
-```sql
--- Remplacez l'UUID par celui de votre user
-SELECT create_demo_admin_user(
-  'uuid-de-votre-user-ici'::uuid,
-  'admin@turquoise-crm.com',
-  'Admin',
-  'Turquoise'
-);
-```
-
-6. Cliquez **"Run"**
-
-✅ **Terminé !** Vous avez créé un utilisateur admin avec tous les droits.
+   - **Email** : votre email (ex: `admin@votreentreprise.com`)
+   - **Password** : un mot de passe sécurisé (minimum 8 caractères)
+   - **✅ Auto-confirm user** (important !)
+4. Cliquez sur **"Create user"**
 
 ---
 
-## ✅ ÉTAPE 5 : Installer et lancer (1 minute)
+### **5. Installer et lancer l'application**
 
-Dans le terminal VS Code :
+Dans votre terminal, à la racine du projet :
 
 ```bash
 # Installer les dépendances
 npm install
 
-# Lancer le serveur de développement
+# Lancer l'application
 npm run dev
 ```
 
-⏳ Attendez que l'installation se termine (1-2 minutes)
-
-Quand vous voyez :
-
-```
-✓ Ready in 2.5s
-○ Local: http://localhost:3000
-```
+🎉 **L'application est disponible sur** : [http://localhost:3000](http://localhost:3000)
 
 ---
 
-## 🎉 FÉLICITATIONS !
+## 🔐 Connexion
 
-Ouvrez [http://localhost:3000](http://localhost:3000) dans votre navigateur.
-
-**Connectez-vous avec :**
-- Email : celui que vous avez créé
-- Password : celui que vous avez défini
-
-🏝️ **Bienvenue dans Turquoise CRM !**
+1. Ouvrez [http://localhost:3000](http://localhost:3000)
+2. Connectez-vous avec :
+   - **Email** : celui créé à l'étape 4
+   - **Mot de passe** : celui défini à l'étape 4
 
 ---
 
-## 🆘 EN CAS DE PROBLÈME
+## 🎨 Prochaines Étapes
 
-### Erreur "SUPABASE_URL is not defined"
-→ Vérifiez que le fichier `.env.local` existe et contient bien vos clés
+Après connexion, vous pourrez :
+
+- ✅ Créer vos premiers clients
+- ✅ Ajouter des contacts
+- ✅ Gérer des opportunités commerciales
+- ✅ Suivre vos activités quotidiennes
+- ✅ Générer des devis et factures
+
+---
+
+## 🆘 Problèmes Courants
+
+### Erreur "Invalid API key"
+➡️ Vérifiez que `.env.local` contient les bonnes clés (pas d'espaces, pas de guillemets)
 
 ### Erreur "relation does not exist"
-→ Vous avez oublié d'exécuter les migrations SQL (Étape 3)
+➡️ Vérifiez que les 3 migrations SQL ont bien été exécutées dans l'ordre
 
-### Page blanche ou erreur 500
-→ Vérifiez la console du navigateur (F12) et le terminal pour les messages d'erreur
-
-### Impossible de se connecter
-→ Vérifiez que vous avez bien coché "Auto Confirm User" lors de la création
+### Erreur de connexion
+➡️ Vérifiez que vous avez coché **"Auto-confirm user"** lors de la création de l'utilisateur
 
 ---
 
-## 📞 BESOIN D'AIDE ?
+## 📚 Documentation Complète
 
-Si quelque chose ne fonctionne pas :
-1. Vérifiez que vous avez bien suivi les 5 étapes
-2. Redémarrez le serveur (Ctrl+C puis `npm run dev`)
-3. Vérifiez les logs dans le terminal
+Pour en savoir plus sur l'architecture et les fonctionnalités :
+
+- 📖 **[ARCHITECTURE_COMPLETE.md](./ARCHITECTURE_COMPLETE.md)** - Documentation technique détaillée
+- 📖 **[README.md](./README.md)** - Vue d'ensemble du projet
 
 ---
 
-**TEMPS TOTAL : 5-6 MINUTES** ⏱️
+## 💬 Support
 
-**C'est tout ! Vous n'avez rien d'autre à configurer.** 🚀
+Si vous rencontrez un problème, consultez :
+
+1. Les messages d'erreur dans la console du navigateur (F12)
+2. Les logs du serveur dans votre terminal
+3. La documentation Supabase : [docs.supabase.com](https://docs.supabase.com)
+
+---
+
+**Temps total estimé** : ⏱️ **5 minutes**
+
+Bon développement ! 🚀

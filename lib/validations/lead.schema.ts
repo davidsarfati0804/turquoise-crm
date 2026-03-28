@@ -3,11 +3,13 @@ import { z } from 'zod'
 export const leadSchema = z.object({
   event_id: z.string().uuid().nullable(),
   source: z.enum(['whatsapp', 'phone', 'email', 'manual', 'other']),
-  primary_contact_name: z.string().min(1, 'Le nom est requis'),
-  primary_contact_phone: z.string().nullable(),
-  primary_contact_email: z.string().email().nullable().or(z.literal('')),
-  raw_message: z.string().nullable(),
-  internal_summary: z.string().nullable(),
+  first_name: z.string().min(1, 'Le prénom est requis'),
+  last_name: z.string().min(1, 'Le nom est requis'),
+  phone: z.string().min(1, 'Le téléphone est requis'),
+  email: z.string().email().nullable().or(z.literal('')),
+  adults_count: z.number().int().min(1).default(1),
+  children_count: z.number().int().min(0).default(0),
+  babies_count: z.number().int().min(0).default(0),
 })
 
 export type LeadFormData = z.infer<typeof leadSchema>

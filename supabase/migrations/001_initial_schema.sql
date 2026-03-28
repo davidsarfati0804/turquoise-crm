@@ -1,393 +1,451 @@
 -- =====================================================
--- TURQUOISE CRM - Initial Schema
+-- TURQUOISE CRM - SCHEMA POSTGRESQL COMPLET
 -- =====================================================
+-- Version: 1.0
+-- Date: 2026-03-23
+-- Description: Schéma complet avec 14 tables pour un CRM B2B moderne
 
--- Enable UUID extension
+-- Extensions nécessaires
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- =====================================================
--- ENUMS
+-- 1. TABLE: clients
 -- =====================================================
-
-CREATE TYPE event_type AS ENUM ('stay', 'wedding', 'other');
-CREATE TYPE event_status AS ENUM ('draft', 'active', 'archived');
-CREATE TYPE lead_source AS ENUM ('whatsapp', 'phone', 'email', 'manual', 'other');
-CREATE TYPE lead_status AS ENUM ('new', 'qualified', 'converted', 'lost');
-CREATE TYPE crm_status AS ENUM (
-  'new_lead',
-  'qualification_in_progress',
-  'inscription_in_progress',
-  'bulletin_ready',
-  'waiting_internal_validation',
-  'validated',
-  'completed',
-  'cancelled'
-);
-CREATE TYPE payment_status AS ENUM ('not_sent', 'pending', 'partially_paid', 'paid', 'failed', 'refunded');
-CREATE TYPE invoice_status AS ENUM ('not_created', 'pending', 'created', 'sent', 'paid');
-CREATE TYPE participant_type AS ENUM ('adult', 'child', 'baby');
-CREATE TYPE payment_link_status AS ENUM ('draft', 'sent', 'paid', 'expired', 'cancelled');
-CREATE TYPE currency_type AS ENUM ('EUR', 'USD', 'GBP');
-
--- =====================================================
--- USERS & PERMISSIONS
--- =====================================================
-
--- Roles
-CREATE TABLE roles (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name VARCHAR(50) UNIQUE NOT NULL,
-  label VARCHAR(100) NOT NULL,
-  description TEXT,
-  is_system BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS clients (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nom VARCHAR(255) NOT NULL,
+    type_client VARCHAR(50) CHECK (type_client IN ('entreprise', 'individu')) DEFAULT 'entreprise',
+    secteur_activite VARCHAR(100),
+    site_web VARCHAR(255),
+    telephone VARCHAR(50),
+    email VARCHAR(255),
+    adresse_ligne1 VARCHAR(255),
+    adresse_ligne2 VARCHAR(255),
+    ville VARCHAR(100),
+    code_postal VARCHAR(20),
+    pays VARCHAR(100) DEFAULT 'France',
+    statut VARCHAR(50) CHECK (statut IN ('actif', 'inactif', 'prospect')) DEFAULT 'prospect',
+    source VARCHAR(100),
+    nombre_employes INTEGER,
+    chiffre_affaires DECIMAL(15, 2),
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    date_modification TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    cree_par UUID REFERENCES auth.users(id),
+    modifie_par UUID REFERENCES auth.users(id),
+    notes TEXT
 );
 
--- Permissions
-CREATE TABLE permissions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  code VARCHAR(100) UNIQUE NOT NULL,
-  label VARCHAR(100) NOT NULL,
-  module VARCHAR(50) NOT NULL,
-  description TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+-- Index pour recherche full-text
+CREATE INDEX IF NOT EXISTS idx_clients_nom_trgm ON clients USING gin (nom gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_clients_statut ON clients(statut);
+CREATE INDEX IF NOT EXISTS idx_clients_secteur ON clients(secteur_activite);
+
+-- =====================================================
+-- 2. TABLE: contacts
+-- =====================================================
+CREATE TABLE IF NOT EXISTS contacts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    prenom VARCHAR(100) NOT NULL,
+    nom VARCHAR(100) NOT NULL,
+    poste VARCHAR(150),
+    email VARCHAR(255) UNIQUE,
+    telephone_mobile VARCHAR(50),
+    telephone_fixe VARCHAR(50),
+    linkedin_url VARCHAR(255),
+    est_principal BOOLEAN DEFAULT FALSE,
+    statut VARCHAR(50) CHECK (statut IN ('actif', 'inactif')) DEFAULT 'actif',
+    date_naissance DATE,
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    date_modification TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    cree_par UUID REFERENCES auth.users(id),
+    notes TEXT
 );
 
--- Role Permissions (many-to-many)
-CREATE TABLE role_permissions (
-  role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
-  permission_id UUID REFERENCES permissions(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  PRIMARY KEY (role_id, permission_id)
+CREATE INDEX IF NOT EXISTS idx_contacts_client ON contacts(client_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email);
+CREATE INDEX IF NOT EXISTS idx_contacts_nom_trgm ON contacts USING gin ((prenom || ' ' || nom) gin_trgm_ops);
+
+-- =====================================================
+-- 3. TABLE: opportunites
+-- =====================================================
+CREATE TABLE IF NOT EXISTS opportunites (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+    titre VARCHAR(255) NOT NULL,
+    description TEXT,
+    montant DECIMAL(15, 2),
+    devise VARCHAR(3) DEFAULT 'EUR',
+    probabilite INTEGER CHECK (probabilite >= 0 AND probabilite <= 100),
+    etape VARCHAR(100) CHECK (etape IN ('prospection', 'qualification', 'proposition', 'negociation', 'gagnee', 'perdue')) DEFAULT 'prospection',
+    date_cloture_estimee DATE,
+    date_cloture_reelle DATE,
+    statut VARCHAR(50) CHECK (statut IN ('ouvert', 'gagne', 'perdu', 'annule')) DEFAULT 'ouvert',
+    source VARCHAR(100),
+    concurrent VARCHAR(255),
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    date_modification TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    assigne_a UUID REFERENCES auth.users(id),
+    cree_par UUID REFERENCES auth.users(id),
+    notes TEXT
 );
 
--- Users (extends Supabase auth.users)
-CREATE TABLE users (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  first_name VARCHAR(100),
-  last_name VARCHAR(100),
-  email VARCHAR(255) UNIQUE NOT NULL,
-  role_id UUID REFERENCES roles(id),
-  is_active BOOLEAN DEFAULT true,
-  avatar_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE INDEX IF NOT EXISTS idx_opportunites_client ON opportunites(client_id);
+CREATE INDEX IF NOT EXISTS idx_opportunites_etape ON opportunites(etape);
+CREATE INDEX IF NOT EXISTS idx_opportunites_statut ON opportunites(statut);
+CREATE INDEX IF NOT EXISTS idx_opportunites_assigne ON opportunites(assigne_a);
+CREATE INDEX IF NOT EXISTS idx_opportunites_date_cloture ON opportunites(date_cloture_estimee);
+
+-- =====================================================
+-- 4. TABLE: activites
+-- =====================================================
+CREATE TABLE IF NOT EXISTS activites (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    type_activite VARCHAR(50) CHECK (type_activite IN ('appel', 'email', 'reunion', 'tache', 'note')) NOT NULL,
+    sujet VARCHAR(255) NOT NULL,
+    description TEXT,
+    date_debut TIMESTAMP WITH TIME ZONE NOT NULL,
+    date_fin TIMESTAMP WITH TIME ZONE,
+    duree_minutes INTEGER,
+    statut VARCHAR(50) CHECK (statut IN ('planifie', 'en_cours', 'termine', 'annule')) DEFAULT 'planifie',
+    priorite VARCHAR(20) CHECK (priorite IN ('basse', 'normale', 'haute', 'urgente')) DEFAULT 'normale',
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+    opportunite_id UUID REFERENCES opportunites(id) ON DELETE SET NULL,
+    assigne_a UUID REFERENCES auth.users(id),
+    cree_par UUID REFERENCES auth.users(id),
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    resultat TEXT
 );
 
--- =====================================================
--- EVENTS
--- =====================================================
+CREATE INDEX IF NOT EXISTS idx_activites_client ON activites(client_id);
+CREATE INDEX IF NOT EXISTS idx_activites_contact ON activites(contact_id);
+CREATE INDEX IF NOT EXISTS idx_activites_opportunite ON activites(opportunite_id);
+CREATE INDEX IF NOT EXISTS idx_activites_assigne ON activites(assigne_a);
+CREATE INDEX IF NOT EXISTS idx_activites_date ON activites(date_debut);
+CREATE INDEX IF NOT EXISTS idx_activites_statut ON activites(statut);
 
-CREATE TABLE events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name VARCHAR(200) NOT NULL,
-  slug VARCHAR(200) UNIQUE NOT NULL,
-  event_type event_type DEFAULT 'stay',
-  status event_status DEFAULT 'draft',
-  start_date DATE,
-  end_date DATE,
-  hotel_name VARCHAR(200),
-  destination_label VARCHAR(200),
-  sales_open_at TIMESTAMPTZ,
-  sales_close_at TIMESTAMPTZ,
-  description TEXT,
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+-- =====================================================
+-- 5. TABLE: devis
+-- =====================================================
+CREATE TABLE IF NOT EXISTS devis (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    numero_devis VARCHAR(50) UNIQUE NOT NULL,
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    opportunite_id UUID REFERENCES opportunites(id) ON DELETE SET NULL,
+    date_emission DATE NOT NULL,
+    date_expiration DATE,
+    montant_ht DECIMAL(15, 2) NOT NULL,
+    taux_tva DECIMAL(5, 2) DEFAULT 20.00,
+    montant_ttc DECIMAL(15, 2) NOT NULL,
+    devise VARCHAR(3) DEFAULT 'EUR',
+    statut VARCHAR(50) CHECK (statut IN ('brouillon', 'envoye', 'accepte', 'refuse', 'expire')) DEFAULT 'brouillon',
+    conditions_paiement TEXT,
+    notes TEXT,
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    date_modification TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    cree_par UUID REFERENCES auth.users(id)
 );
 
--- =====================================================
--- ROOM TYPES & PRICING
--- =====================================================
+CREATE INDEX IF NOT EXISTS idx_devis_client ON devis(client_id);
+CREATE INDEX IF NOT EXISTS idx_devis_numero ON devis(numero_devis);
+CREATE INDEX IF NOT EXISTS idx_devis_statut ON devis(statut);
 
-CREATE TABLE room_types (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  event_id UUID REFERENCES events(id) ON DELETE CASCADE,
-  code VARCHAR(50) NOT NULL,
-  name VARCHAR(100) NOT NULL,
-  description TEXT,
-  base_capacity INTEGER DEFAULT 2,
-  max_capacity INTEGER DEFAULT 2,
-  is_active BOOLEAN DEFAULT true,
-  display_order INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(event_id, code)
+-- =====================================================
+-- 6. TABLE: lignes_devis
+-- =====================================================
+CREATE TABLE IF NOT EXISTS lignes_devis (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    devis_id UUID REFERENCES devis(id) ON DELETE CASCADE,
+    ordre INTEGER NOT NULL,
+    designation VARCHAR(255) NOT NULL,
+    description TEXT,
+    quantite DECIMAL(10, 2) NOT NULL DEFAULT 1,
+    prix_unitaire_ht DECIMAL(15, 2) NOT NULL,
+    taux_remise DECIMAL(5, 2) DEFAULT 0,
+    montant_ht DECIMAL(15, 2) NOT NULL,
+    taux_tva DECIMAL(5, 2) DEFAULT 20.00
 );
 
-CREATE TABLE event_room_pricing (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  event_id UUID REFERENCES events(id) ON DELETE CASCADE,
-  room_type_id UUID REFERENCES room_types(id) ON DELETE CASCADE,
-  label VARCHAR(200),
-  price_amount DECIMAL(10, 2) NOT NULL,
-  currency currency_type DEFAULT 'EUR',
-  deposit_amount DECIMAL(10, 2),
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(event_id, room_type_id)
+CREATE INDEX IF NOT EXISTS idx_lignes_devis_devis ON lignes_devis(devis_id);
+
+-- =====================================================
+-- 7. TABLE: factures
+-- =====================================================
+CREATE TABLE IF NOT EXISTS factures (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    numero_facture VARCHAR(50) UNIQUE NOT NULL,
+    devis_id UUID REFERENCES devis(id) ON DELETE SET NULL,
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    date_emission DATE NOT NULL,
+    date_echeance DATE,
+    montant_ht DECIMAL(15, 2) NOT NULL,
+    taux_tva DECIMAL(5, 2) DEFAULT 20.00,
+    montant_ttc DECIMAL(15, 2) NOT NULL,
+    devise VARCHAR(3) DEFAULT 'EUR',
+    statut VARCHAR(50) CHECK (statut IN ('brouillon', 'envoyee', 'payee', 'en_retard', 'annulee')) DEFAULT 'brouillon',
+    mode_paiement VARCHAR(50),
+    date_paiement DATE,
+    conditions_paiement TEXT,
+    notes TEXT,
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    date_modification TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    cree_par UUID REFERENCES auth.users(id)
 );
 
--- =====================================================
--- LEADS
--- =====================================================
+CREATE INDEX IF NOT EXISTS idx_factures_client ON factures(client_id);
+CREATE INDEX IF NOT EXISTS idx_factures_numero ON factures(numero_facture);
+CREATE INDEX IF NOT EXISTS idx_factures_statut ON factures(statut);
+CREATE INDEX IF NOT EXISTS idx_factures_date_echeance ON factures(date_echeance);
 
-CREATE TABLE leads (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  event_id UUID REFERENCES events(id) ON DELETE SET NULL,
-  source lead_source DEFAULT 'manual',
-  status lead_status DEFAULT 'new',
-  primary_contact_name VARCHAR(200),
-  primary_contact_phone VARCHAR(50),
-  primary_contact_email VARCHAR(255),
-  raw_message TEXT,
-  internal_summary TEXT,
-  assigned_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  converted_to_client_file_id UUID, -- Added later with FK
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+-- =====================================================
+-- 8. TABLE: lignes_factures
+-- =====================================================
+CREATE TABLE IF NOT EXISTS lignes_factures (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    facture_id UUID REFERENCES factures(id) ON DELETE CASCADE,
+    ordre INTEGER NOT NULL,
+    designation VARCHAR(255) NOT NULL,
+    description TEXT,
+    quantite DECIMAL(10, 2) NOT NULL DEFAULT 1,
+    prix_unitaire_ht DECIMAL(15, 2) NOT NULL,
+    taux_remise DECIMAL(5, 2) DEFAULT 0,
+    montant_ht DECIMAL(15, 2) NOT NULL,
+    taux_tva DECIMAL(5, 2) DEFAULT 20.00
 );
 
--- =====================================================
--- CLIENT FILES (Dossiers)
--- =====================================================
+CREATE INDEX IF NOT EXISTS idx_lignes_factures_facture ON lignes_factures(facture_id);
 
-CREATE TABLE client_files (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  event_id UUID REFERENCES events(id) ON DELETE RESTRICT,
-  lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
-  file_reference VARCHAR(50) UNIQUE NOT NULL,
-  
-  -- Status
-  crm_status crm_status DEFAULT 'new_lead',
-  payment_status payment_status DEFAULT 'not_sent',
-  invoice_status invoice_status DEFAULT 'not_created',
-  
-  -- Contact principal
-  primary_contact_first_name VARCHAR(100),
-  primary_contact_last_name VARCHAR(100),
-  primary_contact_phone VARCHAR(50),
-  primary_contact_email VARCHAR(255),
-  
-  -- Commercial
-  total_participants INTEGER DEFAULT 0,
-  adults_count INTEGER DEFAULT 0,
-  children_count INTEGER DEFAULT 0,
-  babies_count INTEGER DEFAULT 0,
-  
-  selected_room_type_id UUID REFERENCES room_types(id) ON DELETE SET NULL,
-  quoted_price DECIMAL(10, 2),
-  amount_paid DECIMAL(10, 2) DEFAULT 0,
-  balance_due DECIMAL(10, 2),
-  
-  notes TEXT,
-  
-  -- Tracking
-  created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  assigned_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+-- =====================================================
+-- 9. TABLE: produits
+-- =====================================================
+CREATE TABLE IF NOT EXISTS produits (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    reference VARCHAR(50) UNIQUE NOT NULL,
+    nom VARCHAR(255) NOT NULL,
+    description TEXT,
+    categorie VARCHAR(100),
+    prix_unitaire_ht DECIMAL(15, 2) NOT NULL,
+    taux_tva DECIMAL(5, 2) DEFAULT 20.00,
+    unite VARCHAR(50) DEFAULT 'unité',
+    stock_actuel INTEGER DEFAULT 0,
+    stock_minimum INTEGER DEFAULT 0,
+    actif BOOLEAN DEFAULT TRUE,
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    date_modification TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    cree_par UUID REFERENCES auth.users(id)
 );
 
--- Add FK from leads to client_files
-ALTER TABLE leads
-  ADD CONSTRAINT fk_leads_client_file
-  FOREIGN KEY (converted_to_client_file_id)
-  REFERENCES client_files(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_produits_reference ON produits(reference);
+CREATE INDEX IF NOT EXISTS idx_produits_categorie ON produits(categorie);
+CREATE INDEX IF NOT EXISTS idx_produits_nom_trgm ON produits USING gin (nom gin_trgm_ops);
 
 -- =====================================================
--- PARTICIPANTS
+-- 10. TABLE: documents
 -- =====================================================
-
-CREATE TABLE participants (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_file_id UUID REFERENCES client_files(id) ON DELETE CASCADE,
-  first_name VARCHAR(100) NOT NULL,
-  last_name VARCHAR(100),
-  age INTEGER,
-  participant_type participant_type DEFAULT 'adult',
-  birth_date DATE,
-  notes TEXT,
-  display_order INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS documents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nom_fichier VARCHAR(255) NOT NULL,
+    type_fichier VARCHAR(100),
+    taille_octets BIGINT,
+    url_stockage TEXT NOT NULL,
+    type_document VARCHAR(50) CHECK (type_document IN ('contrat', 'presentation', 'rapport', 'autre')) DEFAULT 'autre',
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    opportunite_id UUID REFERENCES opportunites(id) ON DELETE SET NULL,
+    devis_id UUID REFERENCES devis(id) ON DELETE SET NULL,
+    facture_id UUID REFERENCES factures(id) ON DELETE SET NULL,
+    date_upload TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    uploade_par UUID REFERENCES auth.users(id),
+    description TEXT
 );
 
--- =====================================================
--- PAYMENT LINKS
--- =====================================================
+CREATE INDEX IF NOT EXISTS idx_documents_client ON documents(client_id);
+CREATE INDEX IF NOT EXISTS idx_documents_opportunite ON documents(opportunite_id);
+CREATE INDEX IF NOT EXISTS idx_documents_devis ON documents(devis_id);
+CREATE INDEX IF NOT EXISTS idx_documents_facture ON documents(facture_id);
 
-CREATE TABLE payment_links (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_file_id UUID REFERENCES client_files(id) ON DELETE CASCADE,
-  provider VARCHAR(50) DEFAULT 'bred_manual',
-  url TEXT,
-  amount DECIMAL(10, 2) NOT NULL,
-  currency currency_type DEFAULT 'EUR',
-  status payment_link_status DEFAULT 'draft',
-  sent_at TIMESTAMPTZ,
-  paid_at TIMESTAMPTZ,
-  external_reference VARCHAR(200),
-  notes TEXT,
-  created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+-- =====================================================
+-- 11. TABLE: notes
+-- =====================================================
+CREATE TABLE IF NOT EXISTS notes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    contenu TEXT NOT NULL,
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    contact_id UUID REFERENCES contacts(id) ON DELETE CASCADE,
+    opportunite_id UUID REFERENCES opportunites(id) ON DELETE CASCADE,
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    date_modification TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    cree_par UUID REFERENCES auth.users(id),
+    modifie_par UUID REFERENCES auth.users(id),
+    epingle BOOLEAN DEFAULT FALSE
 );
 
--- =====================================================
--- INVOICES
--- =====================================================
+CREATE INDEX IF NOT EXISTS idx_notes_client ON notes(client_id);
+CREATE INDEX IF NOT EXISTS idx_notes_contact ON notes(contact_id);
+CREATE INDEX IF NOT EXISTS idx_notes_opportunite ON notes(opportunite_id);
+CREATE INDEX IF NOT EXISTS idx_notes_cree_par ON notes(cree_par);
 
-CREATE TABLE invoices (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  client_file_id UUID REFERENCES client_files(id) ON DELETE CASCADE,
-  provider VARCHAR(50) DEFAULT 'pennylane_future',
-  status invoice_status DEFAULT 'not_created',
-  external_invoice_id VARCHAR(200),
-  invoice_number VARCHAR(100),
-  amount DECIMAL(10, 2),
-  currency currency_type DEFAULT 'EUR',
-  issued_at TIMESTAMPTZ,
-  due_at TIMESTAMPTZ,
-  pdf_url TEXT,
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+-- =====================================================
+-- 12. TABLE: tags
+-- =====================================================
+CREATE TABLE IF NOT EXISTS tags (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nom VARCHAR(100) UNIQUE NOT NULL,
+    couleur VARCHAR(7) DEFAULT '#3B82F6',
+    description TEXT,
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- =====================================================
--- ACTIVITY LOG
--- =====================================================
+CREATE INDEX IF NOT EXISTS idx_tags_nom ON tags(nom);
 
-CREATE TABLE activity_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  entity_type VARCHAR(50) NOT NULL,
-  entity_id UUID NOT NULL,
-  action_type VARCHAR(50) NOT NULL,
-  action_label VARCHAR(200),
-  metadata JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+-- =====================================================
+-- 13. TABLE: tags_entites (relation many-to-many)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS tags_entites (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tag_id UUID REFERENCES tags(id) ON DELETE CASCADE,
+    entite_type VARCHAR(50) CHECK (entite_type IN ('client', 'contact', 'opportunite', 'activite')) NOT NULL,
+    entite_id UUID NOT NULL,
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(tag_id, entite_type, entite_id)
 );
 
-CREATE INDEX idx_activity_logs_entity ON activity_logs(entity_type, entity_id);
-CREATE INDEX idx_activity_logs_created_at ON activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tags_entites_tag ON tags_entites(tag_id);
+CREATE INDEX IF NOT EXISTS idx_tags_entites_entite ON tags_entites(entite_type, entite_id);
 
 -- =====================================================
--- INTERNAL NOTES
+-- 14. TABLE: profils_utilisateurs
 -- =====================================================
-
-CREATE TABLE internal_notes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  entity_type VARCHAR(50) NOT NULL,
-  entity_id UUID NOT NULL,
-  content TEXT NOT NULL,
-  created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS profils_utilisateurs (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    nom_complet VARCHAR(255),
+    poste VARCHAR(150),
+    telephone VARCHAR(50),
+    avatar_url TEXT,
+    role VARCHAR(50) CHECK (role IN ('admin', 'commercial', 'manager', 'utilisateur')) DEFAULT 'utilisateur',
+    equipe VARCHAR(100),
+    actif BOOLEAN DEFAULT TRUE,
+    date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    date_derniere_connexion TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX idx_internal_notes_entity ON internal_notes(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_profils_role ON profils_utilisateurs(role);
+CREATE INDEX IF NOT EXISTS idx_profils_equipe ON profils_utilisateurs(equipe);
 
 -- =====================================================
--- INDEXES
+-- FONCTIONS & TRIGGERS
 -- =====================================================
 
-CREATE INDEX idx_events_status ON events(status);
-CREATE INDEX idx_events_start_date ON events(start_date);
-CREATE INDEX idx_leads_status ON leads(status);
-CREATE INDEX idx_leads_event_id ON leads(event_id);
-CREATE INDEX idx_client_files_crm_status ON client_files(crm_status);
-CREATE INDEX idx_client_files_event_id ON client_files(event_id);
-CREATE INDEX idx_client_files_file_reference ON client_files(file_reference);
-CREATE INDEX idx_participants_client_file_id ON participants(client_file_id);
-CREATE INDEX idx_payment_links_client_file_id ON payment_links(client_file_id);
-CREATE INDEX idx_invoices_client_file_id ON invoices(client_file_id);
-
--- =====================================================
--- TRIGGERS: updated_at
--- =====================================================
-
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+-- Fonction pour mettre à jour automatiquement date_modification
+CREATE OR REPLACE FUNCTION update_date_modification()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
+    NEW.date_modification = NOW();
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_roles_updated_at BEFORE UPDATE ON roles
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Triggers pour date_modification (avec DROP IF EXISTS pour idempotence)
+DROP TRIGGER IF EXISTS update_clients_modification ON clients;
+CREATE TRIGGER update_clients_modification BEFORE UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION update_date_modification();
 
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_contacts_modification ON contacts;
+CREATE TRIGGER update_contacts_modification BEFORE UPDATE ON contacts FOR EACH ROW EXECUTE FUNCTION update_date_modification();
 
-CREATE TRIGGER update_events_updated_at BEFORE UPDATE ON events
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_opportunites_modification ON opportunites;
+CREATE TRIGGER update_opportunites_modification BEFORE UPDATE ON opportunites FOR EACH ROW EXECUTE FUNCTION update_date_modification();
 
-CREATE TRIGGER update_room_types_updated_at BEFORE UPDATE ON room_types
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_devis_modification ON devis;
+CREATE TRIGGER update_devis_modification BEFORE UPDATE ON devis FOR EACH ROW EXECUTE FUNCTION update_date_modification();
 
-CREATE TRIGGER update_event_room_pricing_updated_at BEFORE UPDATE ON event_room_pricing
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_factures_modification ON factures;
+CREATE TRIGGER update_factures_modification BEFORE UPDATE ON factures FOR EACH ROW EXECUTE FUNCTION update_date_modification();
 
-CREATE TRIGGER update_leads_updated_at BEFORE UPDATE ON leads
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_produits_modification ON produits;
+CREATE TRIGGER update_produits_modification BEFORE UPDATE ON produits FOR EACH ROW EXECUTE FUNCTION update_date_modification();
 
-CREATE TRIGGER update_client_files_updated_at BEFORE UPDATE ON client_files
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_participants_updated_at BEFORE UPDATE ON participants
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_payment_links_updated_at BEFORE UPDATE ON payment_links
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON invoices
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_internal_notes_updated_at BEFORE UPDATE ON internal_notes
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_notes_modification ON notes;
+CREATE TRIGGER update_notes_modification BEFORE UPDATE ON notes FOR EACH ROW EXECUTE FUNCTION update_date_modification();
 
 -- =====================================================
--- FUNCTIONS: Generate file reference
+-- VUES UTILES
 -- =====================================================
 
-CREATE OR REPLACE FUNCTION generate_file_reference(p_event_id UUID)
-RETURNS VARCHAR AS $$
-DECLARE
-  event_slug VARCHAR;
-  event_year INTEGER;
-  next_number INTEGER;
-  reference VARCHAR;
-BEGIN
-  -- Get event info
-  SELECT 
-    UPPER(SUBSTRING(slug FROM 1 FOR 3)),
-    EXTRACT(YEAR FROM start_date)::INTEGER
-  INTO event_slug, event_year
-  FROM events
-  WHERE id = p_event_id;
-  
-  -- Get next number for this event
-  SELECT COALESCE(MAX(
-    NULLIF(regexp_replace(
-      SUBSTRING(file_reference FROM '\d+$'), 
-      '[^0-9]', 
-      '', 
-      'g'
-    ), '')::INTEGER
-  ), 0) + 1
-  INTO next_number
-  FROM client_files
-  WHERE event_id = p_event_id;
-  
-  -- Format: MAU-2026-0001
-  reference := event_slug || '-' || event_year || '-' || LPAD(next_number::TEXT, 4, '0');
-  
-  RETURN reference;
-END;
-$$ LANGUAGE plpgsql;
+-- Vue: Pipeline des opportunités avec montants agrégés
+DROP VIEW IF EXISTS vue_pipeline_opportunites;
+CREATE OR REPLACE VIEW vue_pipeline_opportunites AS
+SELECT 
+    o.etape,
+    COUNT(o.id) as nombre_opportunites,
+    SUM(o.montant) as montant_total,
+    AVG(o.probabilite) as probabilite_moyenne,
+    o.devise
+FROM opportunites o
+WHERE o.statut = 'ouvert'
+GROUP BY o.etape, o.devise
+ORDER BY 
+    CASE o.etape
+        WHEN 'prospection' THEN 1
+        WHEN 'qualification' THEN 2
+        WHEN 'proposition' THEN 3
+        WHEN 'negociation' THEN 4
+        ELSE 5
+    END;
+
+-- Vue: Statistiques par commercial
+DROP VIEW IF EXISTS vue_stats_commerciaux;
+CREATE OR REPLACE VIEW vue_stats_commerciaux AS
+SELECT 
+    u.id,
+    p.nom_complet,
+    COUNT(DISTINCT o.id) as nombre_opportunites,
+    SUM(CASE WHEN o.statut = 'gagne' THEN o.montant ELSE 0 END) as ca_realise,
+    SUM(CASE WHEN o.statut = 'ouvert' THEN o.montant ELSE 0 END) as pipeline_actif,
+    COUNT(DISTINCT c.id) as nombre_clients
+FROM auth.users u
+LEFT JOIN profils_utilisateurs p ON u.id = p.id
+LEFT JOIN opportunites o ON o.assigne_a = u.id
+LEFT JOIN clients c ON c.cree_par = u.id
+GROUP BY u.id, p.nom_complet;
+
+DROP VIEW IF EXISTS vue_activites_a_venir;
+-- Vue: Activités à venir
+CREATE OR REPLACE VIEW vue_activites_a_venir AS
+SELECT 
+    a.id,
+    a.type_activite,
+    a.sujet,
+    a.date_debut,
+    a.priorite,
+    c.nom as client_nom,
+    ct.prenom || ' ' || ct.nom as contact_nom,
+    p.nom_complet as assigne_a_nom
+FROM activites a
+LEFT JOIN clients c ON a.client_id = c.id
+LEFT JOIN contacts ct ON a.contact_id = ct.id
+LEFT JOIN profils_utilisateurs p ON a.assigne_a = p.id
+WHERE a.statut IN ('planifie', 'en_cours')
+AND a.date_debut >= NOW()
+ORDER BY a.date_debut ASC;
+
+-- =====================================================
+-- COMMENTAIRES SUR LES TABLES
+-- =====================================================
+
+COMMENT ON TABLE clients IS 'Table principale des clients et prospects';
+COMMENT ON TABLE contacts IS 'Contacts associés aux clients';
+COMMENT ON TABLE opportunites IS 'Opportunités commerciales (deals)';
+COMMENT ON TABLE activites IS 'Activités (appels, emails, réunions, tâches)';
+COMMENT ON TABLE devis IS 'Devis envoyés aux clients';
+COMMENT ON TABLE factures IS 'Factures émises';
+COMMENT ON TABLE produits IS 'Catalogue de produits/services';
+COMMENT ON TABLE documents IS 'Fichiers attachés aux entités';
+COMMENT ON TABLE notes IS 'Notes internes sur clients/contacts/opportunités';
+COMMENT ON TABLE tags IS 'Tags pour catégoriser les entités';
+COMMENT ON TABLE profils_utilisateurs IS 'Profils étendus des utilisateurs';
+
+-- =====================================================
+-- FIN DU SCHEMA
+-- =====================================================
