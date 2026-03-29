@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { Calendar, MapPin, Users, DollarSign, ArrowLeft, Edit } from 'lucide-react'
 import { EventTabs } from './EventTabs'
 
+export const dynamic = 'force-dynamic'
+
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { id } = await params
