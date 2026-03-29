@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { detectPriceColumnName, upsertPricing } from '@/lib/supabase/pricing-utils'
 import { Plus, Save, Trash2 } from 'lucide-react'
 
 export function RoomPricingTab({ event }: { event: any }) {
@@ -40,17 +41,22 @@ export function RoomPricingTab({ event }: { event: any }) {
   const handlePriceChange = (roomTypeId: string, field: string, value: any) => {
     setPricing(prev => {
       const existing = prev.find(p => p.room_type_id === roomTypeId)
+      // Choose which column key to update based on existing row (compat with old migrations)
+      const keyToUse = existing
+        ? (existing.price_per_night !== undefined ? 'price_per_night' : (existing.price_per_person !== undefined ? 'price_per_person' : field))
+        : field
+
       if (existing) {
         return prev.map(p => 
           p.room_type_id === roomTypeId 
-            ? { ...p, [field]: value }
+            ? { ...p, [keyToUse]: value }
             : p
         )
       } else {
         return [...prev, {
           event_id: event.id,
           room_type_id: roomTypeId,
-          [field]: value,
+          [keyToUse]: value,
           is_active: true
         }]
       }
@@ -61,27 +67,38 @@ export function RoomPricingTab({ event }: { event: any }) {
     setSaving(true)
     const supabase = createClient()
 
-    // Supprimer les anciens prix
-    await supabase
-      .from('event_room_pricing')
-      .delete()
-      .eq('event_id', event.id)
+    try {
+      // Détecter le nom correct de la colonne prix dans la base
+      const priceColumnName = await detectPriceColumnName(supabase)
+      console.log(`Using price column: ${priceColumnName}`)
 
-    // Insérer les nouveaux prix (uniquement ceux qui ont un prix défini)
-    const validPricing = pricing.filter(p => p.price_per_night != null && p.price_per_night > 0)
-    
-    if (validPricing.length > 0) {
-      const { error } = await supabase
-        .from('event_room_pricing')
-        .insert(validPricing)
+      // Préparer les prix valides (prix strictement supérieurs à 0)
+      const validPricing = pricing
+        .map(p => {
+          const price = p.price_per_night ?? p.price_per_room ?? p.price_per_person
+          return { ...p, price_value: price }
+        })
+        .filter(p => p.price_value != null && p.price_value > 0)
+
+      if (validPricing.length === 0) {
+        alert('Aucun prix valide à sauvegarder')
+        setSaving(false)
+        return
+      }
+
+      // Utiliser la fonction utilitaire pour l'upsert avec le bon nom de colonne
+      const { error } = await upsertPricing(supabase, validPricing, priceColumnName)
 
       if (error) {
         console.error('Error saving pricing:', error)
-        alert('Erreur lors de la sauvegarde des prix')
+        alert(`Erreur lors de la sauvegarde des prix: ${error.message || error}`)
       } else {
         alert('Prix sauvegardés avec succès')
         loadData()
       }
+    } catch (err) {
+      console.error('Error in handleSave:', err)
+      alert(`Erreur inattendue: ${err instanceof Error ? err.message : 'Unknown error'}`)
     }
 
     setSaving(false)
@@ -124,12 +141,6 @@ export function RoomPricingTab({ event }: { event: any }) {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Prix / nuit
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Acompte
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Occupants max
-              </th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
                 Actif
               </th>
@@ -156,31 +167,16 @@ export function RoomPricingTab({ event }: { event: any }) {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <input
                       type="number"
-                      value={currentPricing.price_per_night || ''}
-                      onChange={(e) => handlePriceChange(roomType.id, 'price_per_night', parseFloat(e.target.value) || 0)}
+                      value={currentPricing.price_per_night ?? currentPricing.price_per_room ?? currentPricing.price_per_person ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        const val = raw === '' ? null : parseFloat(raw)
+                        handlePriceChange(roomType.id, 'price_per_night', val)
+                      }}
                       placeholder="0"
                       className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
                     />
                     <span className="ml-2 text-gray-500">€</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <input
-                      type="number"
-                      value={currentPricing.deposit_amount || ''}
-                      onChange={(e) => handlePriceChange(roomType.id, 'deposit_amount', parseFloat(e.target.value) || 0)}
-                      placeholder="0"
-                      className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
-                    />
-                    <span className="ml-2 text-gray-500">€</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <input
-                      type="number"
-                      value={currentPricing.max_occupancy || roomType.max_occupancy || ''}
-                      onChange={(e) => handlePriceChange(roomType.id, 'max_occupancy', parseInt(e.target.value) || 0)}
-                      placeholder={roomType.max_occupancy?.toString() || '0'}
-                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
-                    />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <input

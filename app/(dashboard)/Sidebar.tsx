@@ -15,7 +15,6 @@ import {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Événements', href: '/dashboard/evenements', icon: Calendar },
   { 
     name: 'CRM', 
     href: '/dashboard/crm', 
@@ -29,7 +28,15 @@ const navigation = [
   { name: 'Dossiers', href: '/dashboard/dossiers', icon: FolderOpen },
   { name: 'Paiements', href: '/dashboard/paiements', icon: DollarSign },
   { name: 'Utilisateurs', href: '/dashboard/utilisateurs', icon: Users },
-  { name: 'Paramètres', href: '/dashboard/parametres', icon: Settings },
+  { 
+    name: 'Réglages', 
+    href: '/dashboard/parametres', 
+    icon: Settings,
+    subItems: [
+      { name: 'Généraux', href: '/dashboard/parametres?tab=general' },
+      { name: 'Événements', href: '/dashboard/parametres?tab=evenements' }
+    ]
+  },
 ]
 
 interface SidebarProps {

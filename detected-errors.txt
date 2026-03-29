@@ -1,0 +1,38 @@
+⨯ Failed to generate static paths for /dashboard/dossiers/[id]:
+[Error [PageNotFoundError]: Cannot find module for page: /(dashboard)/dashboard/dossiers/[id]/page] {
+type: 'PageNotFoundError',
+code: 'ENOENT'
+GET /dashboard/dossiers/cd4fd4c4-812d-4ac2-8ee1-304999cc296a 404 in 574ms
+Error:   [31mx[0m Expected ';', '}' or <eof>
+Syntax Error
+Error:   [31mx[0m Expected ';', '}' or <eof>
+Syntax Error
+Error:   [31mx[0m Expected ';', '}' or <eof>
+Syntax Error
+GET /dashboard/parametres 500 in 2820ms
+GET /dashboard/parametres 500 in 40ms
+GET /dashboard/parametres 500 in 25ms
+GET /dashboard/parametres 500 in 9ms
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+Error:   [31mx[0m Unterminated regexp literal
+Syntax Error
+Error:   [31mx[0m Unterminated regexp literal
+Syntax Error
+GET /dashboard/parametres 500 in 135ms
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+Error:   [31mx[0m Expression expected
+Syntax Error
+GET /dashboard/parametres 500 in 20ms
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+Error:   [31mx[0m Expression expected
+Syntax Error
+Error:   [31mx[0m Expression expected
+Syntax Error
+GET /dashboard/parametres 500 in 59ms
+✓ Compiled /_error in 72ms (860 modules)
+GET /dashboard/parametres 500 in 10ms
+GET /dashboard/parametres 500 in 21ms
+⚠ Fast Refresh had to perform a full reload due to a runtime error.

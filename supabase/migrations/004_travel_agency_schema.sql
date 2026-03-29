@@ -68,6 +68,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_events_updated_at ON events;
 CREATE TRIGGER update_events_updated_at BEFORE UPDATE ON events
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -125,6 +126,7 @@ CREATE TABLE IF NOT EXISTS event_room_pricing (
 CREATE INDEX IF NOT EXISTS idx_event_room_pricing_event ON event_room_pricing(event_id);
 CREATE INDEX IF NOT EXISTS idx_event_room_pricing_room_type ON event_room_pricing(room_type_id);
 
+DROP TRIGGER IF EXISTS update_event_room_pricing_updated_at ON event_room_pricing;
 CREATE TRIGGER update_event_room_pricing_updated_at BEFORE UPDATE ON event_room_pricing
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -162,6 +164,7 @@ CREATE INDEX IF NOT EXISTS idx_leads_event ON leads(event_id);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
 
+DROP TRIGGER IF EXISTS update_leads_updated_at ON leads;
 CREATE TRIGGER update_leads_updated_at BEFORE UPDATE ON leads
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -216,6 +219,7 @@ CREATE INDEX IF NOT EXISTS idx_client_files_lead ON client_files(lead_id);
 CREATE INDEX IF NOT EXISTS idx_client_files_crm_status ON client_files(crm_status);
 CREATE INDEX IF NOT EXISTS idx_client_files_reference ON client_files(file_reference);
 
+DROP TRIGGER IF EXISTS update_client_files_updated_at ON client_files;
 CREATE TRIGGER update_client_files_updated_at BEFORE UPDATE ON client_files
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -273,6 +277,7 @@ CREATE TABLE IF NOT EXISTS participants (
 CREATE INDEX IF NOT EXISTS idx_participants_file ON participants(client_file_id);
 CREATE INDEX IF NOT EXISTS idx_participants_type ON participants(participant_type);
 
+DROP TRIGGER IF EXISTS update_participants_updated_at ON participants;
 CREATE TRIGGER update_participants_updated_at BEFORE UPDATE ON participants
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -339,6 +344,7 @@ CREATE INDEX IF NOT EXISTS idx_invoices_file ON invoices(client_file_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);
 
+DROP TRIGGER IF EXISTS update_invoices_updated_at ON invoices;
 CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON invoices
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -388,6 +394,7 @@ CREATE TABLE IF NOT EXISTS internal_notes (
 CREATE INDEX IF NOT EXISTS idx_internal_notes_file ON internal_notes(client_file_id);
 CREATE INDEX IF NOT EXISTS idx_internal_notes_created ON internal_notes(created_at);
 
+DROP TRIGGER IF EXISTS update_internal_notes_updated_at ON internal_notes;
 CREATE TRIGGER update_internal_notes_updated_at BEFORE UPDATE ON internal_notes
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -439,120 +446,142 @@ ALTER TABLE bulletin_inscriptions ENABLE ROW LEVEL SECURITY;
 -- =====================================================
 -- BASIC RLS POLICIES (allow authenticated users)
 -- =====================================================
+DROP POLICY IF EXISTS "Allow authenticated users to read events" ON events;
 CREATE POLICY "Allow authenticated users to read events"
     ON events FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage events" ON events;
 CREATE POLICY "Allow authenticated users to manage events"
     ON events FOR ALL
     TO authenticated
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read room_types" ON room_types;
 CREATE POLICY "Allow authenticated users to read room_types"
     ON room_types FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage room_types" ON room_types;
 CREATE POLICY "Allow authenticated users to manage room_types"
     ON room_types FOR ALL
     TO authenticated
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read event_room_pricing" ON event_room_pricing;
 CREATE POLICY "Allow authenticated users to read event_room_pricing"
     ON event_room_pricing FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage event_room_pricing" ON event_room_pricing;
 CREATE POLICY "Allow authenticated users to manage event_room_pricing"
     ON event_room_pricing FOR ALL
     TO authenticated
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read leads" ON leads;
 CREATE POLICY "Allow authenticated users to read leads"
     ON leads FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage leads" ON leads;
 CREATE POLICY "Allow authenticated users to manage leads"
     ON leads FOR ALL
     TO authenticated
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read client_files" ON client_files;
 CREATE POLICY "Allow authenticated users to read client_files"
     ON client_files FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage client_files" ON client_files;
 CREATE POLICY "Allow authenticated users to manage client_files"
     ON client_files FOR ALL
     TO authenticated
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read participants" ON participants;
 CREATE POLICY "Allow authenticated users to read participants"
     ON participants FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage participants" ON participants;
 CREATE POLICY "Allow authenticated users to manage participants"
     ON participants FOR ALL
     TO authenticated
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read payment_links" ON payment_links;
 CREATE POLICY "Allow authenticated users to read payment_links"
     ON payment_links FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage payment_links" ON payment_links;
 CREATE POLICY "Allow authenticated users to manage payment_links"
     ON payment_links FOR ALL
     TO authenticated
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read invoices" ON invoices;
 CREATE POLICY "Allow authenticated users to read invoices"
     ON invoices FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage invoices" ON invoices;
 CREATE POLICY "Allow authenticated users to manage invoices"
     ON invoices FOR ALL
     TO authenticated
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read activity_logs" ON activity_logs;
 CREATE POLICY "Allow authenticated users to read activity_logs"
     ON activity_logs FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to create activity_logs" ON activity_logs;
 CREATE POLICY "Allow authenticated users to create activity_logs"
     ON activity_logs FOR INSERT
     TO authenticated
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read internal_notes" ON internal_notes;
 CREATE POLICY "Allow authenticated users to read internal_notes"
     ON internal_notes FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage internal_notes" ON internal_notes;
 CREATE POLICY "Allow authenticated users to manage internal_notes"
     ON internal_notes FOR ALL
     TO authenticated
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read bulletin_inscriptions" ON bulletin_inscriptions;
 CREATE POLICY "Allow authenticated users to read bulletin_inscriptions"
     ON bulletin_inscriptions FOR SELECT
     TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to manage bulletin_inscriptions" ON bulletin_inscriptions;
 CREATE POLICY "Allow authenticated users to manage bulletin_inscriptions"
     ON bulletin_inscriptions FOR ALL
     TO authenticated

@@ -9,6 +9,7 @@ import { TimelineSection } from './TimelineSection'
 import { NotesSection } from './NotesSection'
 import { BIGenerator } from './BIGenerator'
 import { EditableDossierSections } from './EditableDossierSections'
+import { ManageDossierActions } from './ManageDossierActions'
 
 export default async function DossierDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
@@ -86,6 +87,15 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Boutons de gestion du dossier */}
+          <div className="flex flex-col items-end gap-2">
+            <ManageDossierActions
+              dossierId={clientFile.id}
+              dossierReference={clientFile.file_reference}
+              eventId={clientFile.event_id}
+            />
           </div>
         </div>
       </div>

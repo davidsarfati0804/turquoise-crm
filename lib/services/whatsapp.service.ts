@@ -1,7 +1,18 @@
 /**
- * Service d'envoi WhatsApp
- * Infrastructure prête pour intégration future (Cloud API, Twilio, etc.)
+ * WhatsApp Business API Service
+ * Handles incoming messages, outbound messaging, and conversation tracking
  */
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const whatsappApiUrl = 'https://graph.instagram.com/v18.0';
+const whatsappApiToken = process.env.WHATSAPP_API_TOKEN!;
+const whatsappPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export interface WhatsAppBIData {
   phone: string
@@ -17,6 +28,12 @@ export interface WhatsAppResult {
   messageId?: string
   error?: string
   whatsappUrl?: string
+}
+
+export interface WhatsAppMessageMetadata {
+  wa_phone_number: string
+  template_id?: string
+  quick_reply_id?: string
 }
 
 /**
@@ -187,5 +204,207 @@ export function validatePhoneNumber(phone: string): {
   return {
     valid: true,
     formatted: cleaned
+  }
+}
+
+/**
+ * ============================================
+ * WHATSAPP BUSINESS API - NEW INTEGRATION
+ * ============================================
+ */
+
+/**
+ * Send a text message via WhatsApp Business API
+ */
+export async function sendWhatsAppMessage(
+  toPhoneNumber: string,
+  messageContent: string,
+  leadId?: string,
+  clientFileId?: string,
+  metadata?: WhatsAppMessageMetadata
+): Promise<{
+  success: boolean
+  messageId?: string
+  error?: string
+}> {
+  try {
+    // Ensure phone number is in correct format (without +)
+    const cleanPhone = toPhoneNumber.replace(/\D/g, '');
+
+    console.log(`[WhatsApp Service] Sending message to ${cleanPhone}`);
+
+    // Call WhatsApp API to send message
+    const response = await fetch(
+      `${whatsappApiUrl}/${whatsappPhoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${whatsappApiToken}`,
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'text',
+          text: {
+            body: messageContent,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[WhatsApp Service] API Error:', errorData);
+      return {
+        success: false,
+        error: `WhatsApp API error: ${errorData.error?.message || 'Unknown error'}`,
+      };
+    }
+
+    const data = await response.json();
+    const messageId = data.messages?.[0]?.id;
+
+    if (!messageId) {
+      return { success: false, error: 'No message ID returned from API' };
+    }
+
+    // Store outbound message in database
+    const { error: dbError } = await supabase
+      .from('whatsapp_messages')
+      .insert({
+        wa_message_id: messageId,
+        wa_phone_number: toPhoneNumber,
+        message_content: messageContent,
+        message_type: 'text',
+        direction: 'outbound',
+        delivery_status: 'sent',
+        lead_id: leadId || null,
+        client_file_id: clientFileId || null,
+        metadata: metadata || {},
+      });
+
+    if (dbError) {
+      console.error('[WhatsApp Service] Database error storing message:', dbError);
+      return {
+        success: false,
+        error: `Message sent but not recorded: ${dbError.message}`,
+      };
+    }
+
+    console.log(`[WhatsApp Service] Message sent successfully: ${messageId}`);
+
+    return { success: true, messageId };
+  } catch (error) {
+    console.error('[WhatsApp Service] Error sending message:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Get response templates for quick replies
+ */
+export async function getResponseTemplates(): Promise<
+  Array<{
+    id: string
+    name: string
+    content: string
+    category: string
+  }>
+> {
+  const { data, error } = await supabase
+    .from('whatsapp_response_templates')
+    .select('id, name, content, category')
+    .eq('active', true)
+    .order('category', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('[WhatsApp Service] Error fetching templates:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
+ * Get conversation history for a phone number
+ */
+export async function getConversationHistory(
+  phoneNumber: string,
+  limit: number = 50
+): Promise<
+  Array<{
+    id: string
+    message_content: string
+    direction: string
+    delivery_status: string
+    created_at: string
+  }>
+> {
+  const { data, error } = await supabase
+    .from('whatsapp_messages')
+    .select('id, message_content, direction, delivery_status, created_at')
+    .eq('wa_phone_number', phoneNumber)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('[WhatsApp Service] Error fetching history:', error);
+    return [];
+  }
+
+  return (data || []).reverse(); // Return in chronological order
+}
+
+/**
+ * Get all active conversations
+ */
+export async function getActiveConversations(): Promise<
+  Array<{
+    id: string
+    wa_phone_number: string
+    lead_id?: string
+    client_file_id?: string
+    last_message_at: string
+    message_count: number
+    unread_count: number
+    status: string
+  }>
+> {
+  const { data, error } = await supabase
+    .from('whatsapp_conversations')
+    .select('*')
+    .eq('status', 'active')
+    .order('last_message_at', { ascending: false });
+
+  if (error) {
+    console.error('[WhatsApp Service] Error fetching conversations:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
+ * Mark conversation messages as read
+ */
+export async function markConversationAsRead(
+  phoneNumber: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('whatsapp_conversations')
+      .update({ unread_count: 0 })
+      .eq('wa_phone_number', phoneNumber);
+
+    return !error;
+  } catch (error) {
+    console.error('[WhatsApp Service] Error marking as read:', error);
+    return false;
   }
 }

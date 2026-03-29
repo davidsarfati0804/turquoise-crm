@@ -144,13 +144,15 @@ export function LeadForm() {
     })
   }
 
-  // Prix par nuit pour chaque type de chambre (déjà stocké par nuit)
+  // Prix par nuit pour chaque type de chambre (supporte tous les noms de colonnes)
   const pricePerNight = useMemo(() => {
     const map: Record<string, number> = {}
     for (const pricing of roomTypes) {
       const rtId = pricing.room_types?.id
-      if (rtId && pricing.price_per_night) {
-        map[rtId] = pricing.price_per_night
+      // Try all possible column names for backward compatibility
+      const price = pricing.price_per_night ?? pricing.price_per_room ?? pricing.price_per_person
+      if (rtId && price != null && price > 0) {
+        map[rtId] = price
       }
     }
     return map
