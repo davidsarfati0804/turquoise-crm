@@ -4,6 +4,8 @@ import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { ToastProvider } from '@/components/shared/toast'
 
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardLayout({
   children,
 }: {
