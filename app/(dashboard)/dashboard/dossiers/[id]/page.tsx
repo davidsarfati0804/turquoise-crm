@@ -10,6 +10,7 @@ import { NotesSection } from './NotesSection'
 import { BIGenerator } from './BIGenerator'
 import { EditableDossierSections } from './EditableDossierSections'
 import { ManageDossierActions } from './ManageDossierActions'
+import { WhatsAppConversation } from './WhatsAppConversation'
 
 export default async function DossierDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
@@ -100,10 +101,10 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      {/* Layout 2 colonnes */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Colonne principale */}
-        <div className="lg:col-span-2 space-y-6">
+      {/* Layout split-view avec WhatsApp */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Colonne gauche - Contenu principal (60%) */}
+        <div className="lg:col-span-3 space-y-6">
           {/* Contact + Séjour + Commercial (inline editable) */}
           <EditableDossierSections clientFile={clientFile} roomTypes={roomTypes || []} />
 
@@ -169,9 +170,15 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
           <NotesSection clientFile={clientFile} />
         </div>
 
-        {/* Sidebar d'actions */}
-        <div className="lg:col-span-1">
+        {/* Colonne droite - WhatsApp + Actions (40%) */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Sidebar d'actions */}
           <ActionsSidebar clientFile={clientFile} />
+
+          {/* Conversation WhatsApp */}
+          <div className="h-96">
+            <WhatsAppConversation clientFile={clientFile} />
+          </div>
         </div>
       </div>
     </div>
