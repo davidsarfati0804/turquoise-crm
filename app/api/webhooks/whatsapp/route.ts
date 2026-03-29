@@ -416,7 +416,7 @@ export async function GET(request: NextRequest) {
   const challenge = searchParams.get('hub.challenge');
 
   // Verify token matches
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'your-verify-token';
+  const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 'turquoise2026';
 
   if (mode === 'subscribe' && token === verifyToken) {
     console.log('[WhatsApp] Webhook verified');
