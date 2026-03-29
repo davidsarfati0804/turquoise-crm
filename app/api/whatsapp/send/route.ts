@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { sendWhatsAppMessage } from '@/lib/services/whatsapp.service';
 
 /**
@@ -7,9 +8,10 @@ import { sendWhatsAppMessage } from '@/lib/services/whatsapp.service';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify user is authenticated
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
+    // Verify user is authenticated via Supabase session
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }

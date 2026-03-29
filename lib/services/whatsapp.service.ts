@@ -8,7 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-const whatsappApiUrl = 'https://graph.instagram.com/v18.0';
+const whatsappApiUrl = 'https://graph.facebook.com/v19.0';
 const whatsappApiToken = process.env.WHATSAPP_API_TOKEN!;
 const whatsappPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
 

@@ -10,7 +10,8 @@ import {
   DollarSign,
   Users,
   Settings,
-  FolderOpen
+  FolderOpen,
+  MessageSquare
 } from 'lucide-react'
 
 const navigation = [
@@ -27,6 +28,7 @@ const navigation = [
   { name: 'Leads', href: '/dashboard/leads', icon: FileText },
   { name: 'Événements', href: '/dashboard/evenements', icon: Calendar },
   { name: 'Dossiers', href: '/dashboard/dossiers', icon: FolderOpen },
+  { name: 'Messages', href: '/dashboard/whatsapp', icon: MessageSquare },
   { name: 'Paiements', href: '/dashboard/paiements', icon: DollarSign },
   { name: 'Utilisateurs', href: '/dashboard/utilisateurs', icon: Users },
   { 

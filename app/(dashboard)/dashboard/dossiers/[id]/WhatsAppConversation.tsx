@@ -83,35 +83,31 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
     if (!replyText.trim() || !phoneNumber) return
 
     setSending(true)
-    const supabase = createClient()
 
     try {
-      // Store the outbound message in DB
-      const { data: newMessage, error } = await supabase
-        .from('whatsapp_messages')
-        .insert([
-          {
-            wa_phone_number: phoneNumber,
-            wa_display_name: clientFile?.primary_contact_first_name,
-            client_file_id: clientFile.id,
-            message_type: 'text',
-            message_content: replyText,
-            direction: 'outbound',
-            delivery_status: 'sent',
-            processing_status: 'completed',
-          },
-        ])
-        .select()
-        .single()
+      // Send via WhatsApp API (this also stores the message in DB)
+      const response = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber,
+          message: replyText,
+          clientFileId: clientFile.id,
+        }),
+      })
 
-      if (!error && newMessage) {
-        setMessages((prev) => [...prev, newMessage as Message])
+      const result = await response.json()
+
+      if (result.success) {
         setReplyText('')
-        // TODO: Call WhatsApp API to send the message
-        // await sendViaWhatsAppAPI(phoneNumber, replyText)
+        // Message will appear via real-time subscription
+      } else {
+        console.error('Erreur envoi WhatsApp:', result.error)
+        alert('Erreur lors de l\'envoi: ' + (result.error || 'Erreur inconnue'))
       }
     } catch (err) {
       console.error('Error sending message:', err)
+      alert('Erreur de connexion lors de l\'envoi')
     }
 
     setSending(false)
