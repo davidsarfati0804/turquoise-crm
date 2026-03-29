@@ -14,9 +14,11 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
   const { data: clientFiles, error } = await supabase
     .from('client_files')
     .select(`
-      *,
+      id, file_reference, crm_status, payment_status, quoted_price, updated_at,
+      primary_contact_first_name, primary_contact_last_name, primary_contact_phone,
+      adults_count, children_count, babies_count,
       events (name, start_date),
-      leads (first_name, last_name, phone, email),
+      leads (first_name, last_name, phone),
       room_types (name)
     `)
     .order('updated_at', { ascending: false })
@@ -88,7 +90,11 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
                       </Link>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {file.leads ? `${file.leads.first_name} ${file.leads.last_name}` : '—'}
+                      {file.primary_contact_first_name
+                        ? `${file.primary_contact_first_name} ${file.primary_contact_last_name || ''}`
+                        : file.leads
+                        ? `${file.leads.first_name} ${file.leads.last_name}`
+                        : '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {file.events?.name || '—'}
@@ -97,7 +103,7 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
                       {file.room_types?.name || '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {file.quoted_price ? `${file.quoted_price.toLocaleString('fr-FR')} €` : '—'}
+                      {file.quoted_price != null ? `${Number(file.quoted_price).toLocaleString('fr-FR')} €` : '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${STATUS_COLORS[file.crm_status] || 'bg-gray-100 text-gray-700'}`}>

@@ -94,7 +94,11 @@ export function PipelineView({ clientFiles }: { clientFiles: any[] }) {
                     <Link href={`/dashboard/dossiers/${file.id}`}>
                       <div className="mb-3">
                         <p className="font-semibold text-gray-900 hover:text-turquoise-600">
-                          {file.leads ? `${file.leads.first_name} ${file.leads.last_name}` : 'Sans nom'}
+                          {file.primary_contact_first_name
+                            ? `${file.primary_contact_first_name} ${file.primary_contact_last_name || ''}`
+                            : file.leads
+                            ? `${file.leads.first_name} ${file.leads.last_name}`
+                            : 'Sans nom'}
                         </p>
                         <p className="text-xs text-turquoise-600 font-mono mt-1">
                           {file.file_reference}

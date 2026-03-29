@@ -10,9 +10,10 @@ export default async function PaiementsPage() {
   const { data: dossiers } = await supabase
     .from('client_files')
     .select(`
-      *,
+      id, file_reference, crm_status, payment_status, quoted_price, amount_paid, balance_due, updated_at,
+      primary_contact_first_name, primary_contact_last_name, primary_contact_phone,
       events (name),
-      leads (first_name, last_name, phone, email)
+      leads (first_name, last_name, phone)
     `)
     .order('updated_at', { ascending: false })
 
@@ -93,7 +94,11 @@ export default async function PaiementsPage() {
                       </Link>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {d.leads ? `${d.leads.first_name} ${d.leads.last_name}` : '—'}
+                      {d.primary_contact_first_name
+                        ? `${d.primary_contact_first_name} ${d.primary_contact_last_name || ''}`
+                        : d.leads
+                        ? `${d.leads.first_name} ${d.leads.last_name}`
+                        : '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {d.events?.name || '—'}

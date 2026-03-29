@@ -9,7 +9,10 @@ const nextConfig = {
   },
   images: {
     domains: ['supabase.co'],
+    formats: ['image/avif', 'image/webp'],
   },
+  compress: true,
+  poweredByHeader: false,
 }
 
 module.exports = nextConfig

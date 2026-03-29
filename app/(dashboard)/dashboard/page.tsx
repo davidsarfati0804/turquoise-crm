@@ -6,62 +6,32 @@ import { CRM_STATUS_LABELS, PAYMENT_STATUS_LABELS } from '@/lib/constants/status
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  // KPI 1: Leads du jour
   const today = new Date().toISOString().split('T')[0]
-  const { count: leadsToday } = await supabase
-    .from('leads')
-    .select('*', { count: 'exact', head: true })
-    .gte('created_at', today)
 
-  // KPI 2: Inscriptions en cours
-  const { count: inscriptionsEnCours } = await supabase
-    .from('client_files')
-    .select('*', { count: 'exact', head: true })
-    .in('crm_status', ['lead', 'inscription_en_cours', 'bulletin_pret'])
+  // 3 requêtes au lieu de 8 — KPIs calculés côté JS
+  const [{ count: leadsToday }, { data: allFiles }, { data: events }] = await Promise.all([
+    supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', today),
+    supabase
+      .from('client_files')
+      .select('id, file_reference, crm_status, payment_status, quoted_price, updated_at, primary_contact_first_name, primary_contact_last_name, event_id, events(name)')
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('events')
+      .select('id, name, destination_label, client_files(count)')
+      .order('created_at', { ascending: false })
+      .limit(5),
+  ])
 
-  // KPI 3: Dossiers validés
-  const { count: validates } = await supabase
-    .from('client_files')
-    .select('*', { count: 'exact', head: true })
-    .eq('crm_status', 'valide')
-
-  // KPI 4: Paiements en attente
-  const { count: paiementsEnAttente } = await supabase
-    .from('client_files')
-    .select('*', { count: 'exact', head: true })
-    .eq('payment_status', 'pending')
-
-  // KPI 5: Payés
-  const { count: payes } = await supabase
-    .from('client_files')
-    .select('*', { count: 'exact', head: true })
-    .eq('payment_status', 'paid')
-
-  // KPI 6: CA estimé (somme des prix de tous les dossiers actifs: validés, en attente de paiement, ou payés)
-  const { data: dossiersActifs } = await supabase
-    .from('client_files')
-    .select('quoted_price')
-    .in('crm_status', ['valide', 'paiement_en_attente', 'paye'])
-
-  const caEstime = dossiersActifs?.reduce((sum, d) => sum + (d.quoted_price || 0), 0) || 0
-
-  // Événements récents
-  const { data: events } = await supabase
-    .from('events')
-    .select('*, client_files(count)')
-    .order('created_at', { ascending: false })
-    .limit(5)
-
-  // Derniers dossiers modifiés
-  const { data: recentFiles } = await supabase
-    .from('client_files')
-    .select(`
-      *,
-      events (name),
-      leads (first_name, last_name, phone)
-    `)
-    .order('updated_at', { ascending: false })
-    .limit(10)
+  // KPIs calculés en JS depuis allFiles
+  const inscriptionsEnCours = allFiles?.filter(d => ['lead', 'inscription_en_cours', 'bulletin_pret'].includes(d.crm_status)).length ?? 0
+  const validates = allFiles?.filter(d => d.crm_status === 'valide').length ?? 0
+  const paiementsEnAttente = allFiles?.filter(d => d.payment_status === 'pending').length ?? 0
+  const payes = allFiles?.filter(d => d.payment_status === 'paid').length ?? 0
+  const caEstime = allFiles?.filter(d => ['valide', 'paiement_en_attente', 'paye'].includes(d.crm_status)).reduce((sum, d) => sum + (d.quoted_price || 0), 0) ?? 0
+  const recentFiles = allFiles?.slice(0, 10) ?? []
 
   return (
     <div className="p-8">
@@ -189,7 +159,9 @@ export default async function DashboardPage() {
                       </Link>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {file.leads ? `${file.leads.first_name} ${file.leads.last_name}` : '—'}
+                      {file.primary_contact_first_name
+                        ? `${file.primary_contact_first_name} ${file.primary_contact_last_name || ''}`
+                        : '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {file.events?.name || '—'}

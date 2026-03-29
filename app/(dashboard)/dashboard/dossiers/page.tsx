@@ -87,10 +87,14 @@ export default async function DossiersPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm">
                         <p className="font-medium text-gray-900">
-                          {dossier.leads ? `${dossier.leads.first_name} ${dossier.leads.last_name}` : '—'}
+                          {dossier.primary_contact_first_name
+                            ? `${dossier.primary_contact_first_name} ${dossier.primary_contact_last_name || ''}`
+                            : dossier.leads
+                            ? `${dossier.leads.first_name} ${dossier.leads.last_name}`
+                            : '—'}
                         </p>
-                        {dossier.leads?.phone && (
-                          <p className="text-gray-500 text-xs">{dossier.leads.phone}</p>
+                        {(dossier.primary_contact_phone || dossier.leads?.phone) && (
+                          <p className="text-gray-500 text-xs">{dossier.primary_contact_phone || dossier.leads?.phone}</p>
                         )}
                       </div>
                     </td>
