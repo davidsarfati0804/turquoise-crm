@@ -39,17 +39,23 @@ export function ConvertToFileButton({ lead }: { lead: any }) {
     let quotedPrice = null
 
     if (lead.event_id) {
-      // Charger l'événement pour nights_count
+      // Charger l'événement pour les dates (fallback nights)
       const { data: event } = await supabase
         .from('events')
-        .select('nights_count')
+        .select('nights_count, arrival_date, departure_date')
         .eq('id', lead.event_id)
         .single()
 
-      const eventNights = event?.nights_count || 0
+      // Calculer les nuits de l'événement depuis les dates si nights_count absent
+      let eventNights = event?.nights_count || 0
+      if (!eventNights && event?.arrival_date && event?.departure_date) {
+        eventNights = Math.max(0, Math.round(
+          (new Date(event.departure_date).getTime() - new Date(event.arrival_date).getTime()) / 86400000
+        ))
+      }
 
-      if (eventNights > 0 && voyageursData.length > 0) {
-        // Calculer le total à partir des chambres et dates individuelles
+      // Calcul du prix à partir des dates individuelles de chaque voyageur
+      if (voyageursData.length > 0) {
         const roomTypeIds = [...new Set(voyageursData.map((v: any) => v.room_type_id).filter(Boolean))]
         if (roomTypeIds.length > 0) {
           const { data: pricings } = await supabase
@@ -60,30 +66,36 @@ export function ConvertToFileButton({ lead }: { lead: any }) {
 
           const priceMap: Record<string, number> = {}
           for (const p of pricings || []) {
-            priceMap[p.room_type_id] = p.price_per_night
+            const ppn = (p as any).price_per_night ?? (p as any).price_per_room ?? (p as any).price_per_person
+            if (ppn != null) priceMap[p.room_type_id] = ppn
           }
 
           let total = 0
           for (const v of voyageursData) {
             if (v.room_type_id && v.arrival_date && v.departure_date && priceMap[v.room_type_id]) {
               const nights = Math.max(0, Math.round((new Date(v.departure_date).getTime() - new Date(v.arrival_date).getTime()) / 86400000))
-              const ppn = priceMap[v.room_type_id]
-              total += ppn * nights
+              total += priceMap[v.room_type_id] * nights
+            } else if (v.room_type_id && priceMap[v.room_type_id] && eventNights > 0) {
+              // Fallback sur les nuits de l'événement si le voyageur n'a pas de dates
+              total += priceMap[v.room_type_id] * eventNights
             }
           }
           if (total > 0) quotedPrice = Math.round(total * 100) / 100
         }
       }
 
-      // Fallback: prix simple si pas de dates individuelles
-      if (quotedPrice === null && lead.preferred_room_type_id) {
+      // Fallback: prix simple depuis la chambre préférée du lead
+      if (quotedPrice === null && lead.preferred_room_type_id && eventNights > 0) {
         const { data: pricing } = await supabase
           .from('event_room_pricing')
           .select('price_per_night')
           .eq('event_id', lead.event_id)
           .eq('room_type_id', lead.preferred_room_type_id)
           .single()
-        quotedPrice = pricing?.price_per_night != null ? pricing.price_per_night * eventNights : null
+        const ppn = (pricing as any)?.price_per_night ?? (pricing as any)?.price_per_room ?? (pricing as any)?.price_per_person
+        if (ppn != null && ppn > 0) {
+          quotedPrice = Math.round(ppn * eventNights * 100) / 100
+        }
       }
     }
 

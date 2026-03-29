@@ -304,7 +304,7 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
             <div>
               <p className="text-sm text-gray-500 mb-1">Prix total</p>
               <p className="text-lg font-bold text-gray-900">
-                {clientFile.quoted_price ? `${clientFile.quoted_price.toLocaleString('fr-FR')} €` : '—'}
+                {clientFile.quoted_price != null ? `${Number(clientFile.quoted_price).toLocaleString('fr-FR')} €` : '—'}
               </p>
             </div>
 
@@ -324,7 +324,7 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
               </p>
             </div>
 
-            {clientFile.quoted_price && (
+            {clientFile.quoted_price != null && (
               <div className="col-span-2">
                 <p className="text-sm text-gray-500 mb-1">Solde restant</p>
                 <p className="font-medium text-orange-600">
