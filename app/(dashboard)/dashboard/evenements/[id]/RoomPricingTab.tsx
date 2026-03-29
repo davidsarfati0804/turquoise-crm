@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Save, Trash2 } from 'lucide-react'
 
@@ -10,14 +10,10 @@ export function RoomPricingTab({ event }: { event: any }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    loadData()
-  }, [event.id])
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     const supabase = createClient()
-    
     // Charger les types de chambre
     const { data: roomTypesData } = await supabase
       .from('room_types')
@@ -33,7 +29,13 @@ export function RoomPricingTab({ event }: { event: any }) {
     setRoomTypes(roomTypesData || [])
     setPricing(pricingData || [])
     setLoading(false)
-  }
+  }, [event.id])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // ...existing code...
 
   const handlePriceChange = (roomTypeId: string, field: string, value: any) => {
     setPricing(prev => {
