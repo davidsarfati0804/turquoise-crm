@@ -14,6 +14,7 @@
     "postinstall": "echo '✅ Installation terminée ! Voir SETUP_GUIDE.md pour les 4 étapes suivantes'"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
     "@dnd-kit/core": "^6.1.0",
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -30,7 +31,6 @@
     "@supabase/ssr": "^0.1.0",
     "@supabase/supabase-js": "^2.39.3",
     "@tanstack/react-query": "^5.17.19",
-    "openai": "^4.52.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.2.0",
@@ -38,6 +38,7 @@
     "googleapis": "^171.4.0",
     "lucide-react": "^0.460.0",
     "next": "^15.0.3",
+    "openai": "^4.52.0",
     "pizzip": "^3.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

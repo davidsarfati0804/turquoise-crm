@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import {
   Send, Loader2, MessageSquare, Trash2, Check, CheckCheck,
   Paperclip, Search, X, Image as ImageIcon, FileText, Video,
+  Sparkles, RefreshCw,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -129,6 +130,9 @@ export function WhatsAppInbox() {
   const [deleting, setDeleting] = useState(false);
   const [unreadSepIdx, setUnreadSepIdx] = useState<number | null>(null);
   const [toast, setToast] = useState<{ name: string; content: string; phone: string } | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const selectedPhoneRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -290,8 +294,35 @@ export function WhatsAppInbox() {
   const selectConversation = useCallback((phone: string) => {
     setSelectedPhone(phone);
     setSendError(null);
+    setAiSuggestion(null);
+    setAiError(null);
     setConversations(prev => prev.map(c => c.phone === phone ? { ...c, unreadCount: 0 } : c));
   }, []);
+
+  const handleAiSuggest = useCallback(async () => {
+    if (!selectedPhone || aiLoading) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiSuggestion(null);
+    try {
+      const conv = conversations.find(c => c.phone === selectedPhone);
+      const res = await fetch('/api/whatsapp/ai-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: selectedPhone, contactName: conv?.displayName }),
+      });
+      const data = await res.json() as { suggestion?: string; error?: string };
+      if (!res.ok || !data.suggestion) {
+        setAiError(data.error || 'Erreur IA');
+      } else {
+        setAiSuggestion(data.suggestion);
+      }
+    } catch {
+      setAiError('Erreur de connexion');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [selectedPhone, aiLoading, conversations]);
 
   const handleSend = useCallback(async () => {
     if (!replyText.trim() || !selectedPhone || sending) return;
@@ -558,6 +589,110 @@ export function WhatsAppInbox() {
 
             {/* input */}
             <div className="flex-shrink-0 px-4 py-3" style={{ backgroundColor: '#F0F2F5' }}>
+              {/* AI suggestion panel */}
+              {(aiSuggestion || aiLoading || aiError) && (
+                <div className="mb-2 rounded-xl border border-purple-200 bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-purple-100" style={{ backgroundColor: '#f5f0ff' }}>
+                    <Sparkles className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-purple-700 flex-1">Suggestion IA</span>
+                    {aiSuggestion && (
+                      <button
+                        onClick={handleAiSuggest}
+                        disabled={aiLoading}
+                        title="Régénérer"
+                        className="text-purple-400 hover:text-purple-600 disabled:opacity-40"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { setAiSuggestion(null); setAiError(null); }}
+                      className="text-gray-400 hover:text-gray-600 ml-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {aiLoading && (
+                    <div className="flex items-center gap-2 px-3 py-3 text-xs text-gray-500">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                      Génération en cours…
+                    </div>
+                  )}
+                  {aiError && !aiLoading && (
+                    <div className="px-3 py-2 text-xs text-red-600">{aiError}</div>
+                  )}
+                  {aiSuggestion && !aiLoading && (
+                    <div className="px-3 py-2">
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{aiSuggestion}</p>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => {
+                            setReplyText(aiSuggestion);
+                            setAiSuggestion(null);
+                            setAiError(null);
+                          }}
+                          className="text-xs px-3 py-1.5 rounded-full font-medium text-white transition-colors"
+                          style={{ backgroundColor: '#7c3aed' }}
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const text = aiSuggestion;
+                            setAiSuggestion(null);
+                            setAiError(null);
+                            // Inject into reply box then send
+                            setReplyText(text);
+                          }}
+                          className="text-xs px-3 py-1.5 rounded-full font-medium border border-purple-200 text-purple-700 hover:bg-purple-50 transition-colors"
+                        >
+                          Copier
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!selectedPhone || sending) return;
+                            const text = aiSuggestion;
+                            setAiSuggestion(null);
+                            setAiError(null);
+                            const optId = 'opt_' + Date.now();
+                            const opt: WhatsAppMessage = {
+                              id: optId, wa_phone_number: selectedPhone, wa_display_name: null,
+                              message_content: text, message_type: 'text', direction: 'outbound',
+                              delivery_status: 'queued', created_at: new Date().toISOString(),
+                            };
+                            setMessages(prev => [...prev, opt]);
+                            setSending(true);
+                            setSendError(null);
+                            try {
+                              const res = await fetch('/api/whatsapp/send', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ phoneNumber: selectedPhone, message: text }),
+                              });
+                              const result = await res.json();
+                              if (!result.success) {
+                                setMessages(prev => prev.filter(m => m.id !== optId));
+                                setSendError(result.error || "Impossible d'envoyer le message");
+                              }
+                            } catch {
+                              setSendError('Erreur de connexion');
+                              setMessages(prev => prev.filter(m => m.id !== optId));
+                            } finally {
+                              setSending(false);
+                            }
+                          }}
+                          disabled={sending}
+                          className="text-xs px-3 py-1.5 rounded-full font-medium text-white transition-colors disabled:opacity-40 flex items-center gap-1"
+                          style={{ backgroundColor: WA_DARK }}
+                        >
+                          {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                          Envoyer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               {sendError && (
                 <div className="mb-2 flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                   <X className="w-3.5 h-3.5 flex-shrink-0" />
@@ -589,6 +724,15 @@ export function WhatsAppInbox() {
                   className="flex-1 px-4 py-2.5 bg-white rounded-3xl text-sm outline-none resize-none leading-relaxed shadow-sm"
                   style={{ minHeight: '42px', maxHeight: '120px', overflowY: 'auto' }}
                 />
+                <button
+                  onClick={handleAiSuggest}
+                  disabled={aiLoading || sending || uploading}
+                  title="Suggestion IA"
+                  className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors disabled:opacity-40 shadow-sm border"
+                  style={{ backgroundColor: aiLoading ? '#f5f0ff' : '#ede9fe', borderColor: '#c4b5fd', color: '#7c3aed' }}
+                >
+                  {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                </button>
                 <button
                   onClick={handleSend}
                   disabled={!replyText.trim() || sending || uploading}

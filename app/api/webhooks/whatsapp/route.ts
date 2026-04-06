@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { processMessageIntelligence } from '@/lib/services/whatsapp-ai.service';
 
 // Initialize Supabase server client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -166,60 +165,12 @@ async function storeWhatsAppMessage(
     const dbMessageId = data?.[0]?.id;
     if (!dbMessageId) return null;
 
-    // Trigger async AI processing in background (don't wait)
-    processMessageAsync(
-      dbMessageId,
-      messageContent,
-      displayName || undefined
-    ).catch((e) => console.error('Async processing error:', e));
+    // AI processing can be triggered on-demand from the CRM inbox
 
     return dbMessageId;
   } catch (error) {
     console.error('Error in storeWhatsAppMessage:', error);
     return null;
-  }
-}
-
-/**
- * Async AI processing - lightweight, budget-optimized
- * Extract info + detect event + suggest response
- */
-async function processMessageAsync(
-  messageId: string,
-  messageContent: string,
-  displayName?: string
-) {
-  try {
-    // Mark as processing
-    await supabase
-      .from('whatsapp_messages')
-      .update({ processing_status: 'processing' })
-      .eq('id', messageId);
-
-    // Run AI pipeline (GPT-3.5-turbo, ~200 tokens)
-    const result = await processMessageIntelligence(messageId, messageContent, displayName);
-
-    if (result.success) {
-      console.log('[Webhook] AI completed:', {
-        extracted: result.extractedData?.person_count,
-        event: result.detectedEventName,
-      });
-    } else {
-      console.error('[Webhook] AI failed:', result.error);
-    }
-  } catch (error) {
-    console.error('[Webhook] Async error:', error);
-    try {
-      await supabase
-        .from('whatsapp_messages')
-        .update({
-          processing_status: 'failed',
-          processing_error: error instanceof Error ? error.message : 'Unknown',
-        })
-        .eq('id', messageId);
-    } catch (dbError) {
-      console.error('[Webhook] DB error:', dbError);
-    }
   }
 }
 
