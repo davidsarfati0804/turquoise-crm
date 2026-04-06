@@ -201,7 +201,7 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
           </button>
         </form>
         <p className="text-xs text-gray-500 mt-2">
-          💡 Note: Les messages seront stockés dans le CRM. L'envoi via WhatsApp API sera activé prochainement.
+          💡 Les messages sont stockés dans le CRM. Envoi via Cloud API si configurée, sinon via NanoClaw local.
         </p>
       </div>
     </div>

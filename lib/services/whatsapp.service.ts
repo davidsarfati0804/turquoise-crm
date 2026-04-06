@@ -3,14 +3,22 @@
  * Handles incoming messages, outbound messaging, and conversation tracking
  */
 
+import fs from 'fs';
+import path from 'path';
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const whatsappApiUrl = 'https://graph.facebook.com/v19.0';
-const whatsappApiToken = process.env.WHATSAPP_API_TOKEN!;
-const whatsappPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
+const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
+const whatsappPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const whatsappSendProvider = process.env.WHATSAPP_SEND_PROVIDER;
+
+const nanoclawRoot = process.env.NANOCLAW_ROOT || '/Users/ethan/Documents/nanoclaw';
+const nanoclawMainGroupFolder =
+  process.env.NANOCLAW_MAIN_GROUP_FOLDER || 'whatsapp_main';
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -225,49 +233,132 @@ export async function sendWhatsAppMessage(
 ): Promise<{
   success: boolean
   messageId?: string
+  provider?: 'cloud-api' | 'nanoclaw-ipc'
   error?: string
 }> {
   try {
-    // Ensure phone number is in correct format (without +)
-    const cleanPhone = toPhoneNumber.replace(/\D/g, '');
-
-    console.log(`[WhatsApp Service] Sending message to ${cleanPhone}`);
-
-    // Call WhatsApp API to send message
-    const response = await fetch(
-      `${whatsappApiUrl}/${whatsappPhoneNumberId}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${whatsappApiToken}`,
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'text',
-          text: {
-            body: messageContent,
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('[WhatsApp Service] API Error:', errorData);
-      return {
-        success: false,
-        error: `WhatsApp API error: ${errorData.error?.message || 'Unknown error'}`,
-      };
+    // Derive the target WhatsApp JID from the phone number stored in the DB.
+    // Format "lid:XXXXXXXX" means the contact uses a @lid JID (unresolved LID).
+    // Baileys 6.17+ can send directly to @lid JIDs.
+    let targetJid: string;
+    if (toPhoneNumber.startsWith('lid:')) {
+      targetJid = `${toPhoneNumber.slice(4)}@lid`;
+    } else {
+      const cleanPhone = toPhoneNumber.replace(/\D/g, '');
+      targetJid = `${cleanPhone}@s.whatsapp.net`;
     }
 
-    const data = await response.json();
-    const messageId = data.messages?.[0]?.id;
+    // Only try Cloud API when WHATSAPP_SEND_PROVIDER is not forced to nanoclaw-ipc.
+    // Note: Cloud API cannot send to @lid JIDs — always use NanoClaw for those.
+    const cloudConfigured = Boolean(whatsappApiToken && whatsappPhoneNumberId);
+    const forceNanoclaw = whatsappSendProvider === 'nanoclaw-ipc' || targetJid.endsWith('@lid');
+    const forceCloud = whatsappSendProvider === 'cloud-api' && !targetJid.endsWith('@lid');
 
-    if (!messageId) {
-      return { success: false, error: 'No message ID returned from API' };
+    const queueViaNanoclaw = (): {
+      provider: 'nanoclaw-ipc';
+      messageId: string;
+    } => {
+      const ipcMessagesDir = path.join(
+        nanoclawRoot,
+        'data',
+        'ipc',
+        nanoclawMainGroupFolder,
+        'messages',
+      );
+
+      fs.mkdirSync(ipcMessagesDir, { recursive: true });
+
+      const ipcMessageId = `crm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const payload = {
+        type: 'message',
+        chatJid: targetJid,
+        text: messageContent,
+      };
+
+      const finalPath = path.join(ipcMessagesDir, `${ipcMessageId}.json`);
+      const tempPath = `${finalPath}.tmp`;
+
+      fs.writeFileSync(tempPath, JSON.stringify(payload), 'utf-8');
+      fs.renameSync(tempPath, finalPath);
+
+      console.log(
+        `[WhatsApp Service] Queued via NanoClaw IPC for ${targetJid} in ${ipcMessagesDir}`,
+      );
+
+      return {
+        provider: 'nanoclaw-ipc',
+        messageId: `nanoclaw-ipc-${ipcMessageId}`,
+      };
+    };
+
+    let provider: 'cloud-api' | 'nanoclaw-ipc';
+    let messageId: string;
+
+    if (!forceNanoclaw && cloudConfigured) {
+      console.log(`[WhatsApp Service] Sending via Cloud API to ${cleanPhone}`);
+      const response = await fetch(
+        `${whatsappApiUrl}/${whatsappPhoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${whatsappApiToken}`,
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanPhone,
+            type: 'text',
+            text: {
+              body: messageContent,
+            },
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[WhatsApp Service] API Error:', errorData);
+
+        if (forceCloud) {
+          return {
+            success: false,
+            error: `WhatsApp API error: ${errorData.error?.message || 'Unknown error'}`,
+          };
+        }
+
+        console.warn(
+          '[WhatsApp Service] Falling back to NanoClaw IPC because Cloud API failed.',
+        );
+        const nanoclawResult = queueViaNanoclaw();
+        provider = nanoclawResult.provider;
+        messageId = nanoclawResult.messageId;
+      } else {
+        const data = await response.json();
+        messageId = data.messages?.[0]?.id;
+        if (!messageId) {
+          if (forceCloud) {
+            return { success: false, error: 'No message ID returned from API' };
+          }
+          const nanoclawResult = queueViaNanoclaw();
+          provider = nanoclawResult.provider;
+          messageId = nanoclawResult.messageId;
+        } else {
+          provider = 'cloud-api';
+        }
+      }
+    } else {
+      if (forceCloud && !cloudConfigured) {
+        return {
+          success: false,
+          error:
+            'WHATSAPP_SEND_PROVIDER=cloud-api mais WHATSAPP_API_TOKEN/WHATSAPP_PHONE_NUMBER_ID manquants',
+        };
+      }
+
+      const nanoclawResult = queueViaNanoclaw();
+      provider = nanoclawResult.provider;
+      messageId = nanoclawResult.messageId;
     }
 
     // Store outbound message in database
@@ -279,10 +370,14 @@ export async function sendWhatsAppMessage(
         message_content: messageContent,
         message_type: 'text',
         direction: 'outbound',
-        delivery_status: 'sent',
+        delivery_status: provider === 'cloud-api' ? 'sent' : 'queued',
         lead_id: leadId || null,
         client_file_id: clientFileId || null,
-        metadata: metadata || {},
+        metadata: {
+          ...(metadata || {}),
+          provider,
+          chat_jid: targetJid,
+        },
       });
 
     if (dbError) {
@@ -293,15 +388,81 @@ export async function sendWhatsAppMessage(
       };
     }
 
-    console.log(`[WhatsApp Service] Message sent successfully: ${messageId}`);
+    console.log(
+      `[WhatsApp Service] Message sent successfully: ${messageId} (provider=${provider})`,
+    );
 
-    return { success: true, messageId };
+    return { success: true, messageId, provider };
   } catch (error) {
     console.error('[WhatsApp Service] Error sending message:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
+  }
+}
+
+export type MediaType = 'image' | 'video' | 'document' | 'audio';
+
+/**
+ * Send a media file (image, video, PDF, audio) via NanoClaw IPC.
+ * The mediaUrl must be a publicly accessible URL (e.g. from Supabase Storage).
+ * caption is optional (shown below the media on WhatsApp).
+ */
+export async function sendWhatsAppMedia(
+  toPhoneNumber: string,
+  mediaUrl: string,
+  mediaType: MediaType,
+  caption?: string,
+  leadId?: string,
+  clientFileId?: string,
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const targetJid = toPhoneNumber.startsWith('lid:')
+      ? `${toPhoneNumber.slice(4)}@lid`
+      : `${toPhoneNumber.replace(/\D/g, '')}@s.whatsapp.net`;
+    const ipcMessagesDir = path.join(nanoclawRoot, 'data', 'ipc', nanoclawMainGroupFolder, 'messages');
+    const ipcMessageId = `crm-media-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const payload = {
+      type: 'media',
+      chatJid: targetJid,
+      mediaUrl,
+      mediaType,
+      caption,
+    };
+
+    const finalPath = path.join(ipcMessagesDir, `${ipcMessageId}.json`);
+    const tempPath = `${finalPath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload), 'utf-8');
+    fs.renameSync(tempPath, finalPath);
+
+    console.log(`[WhatsApp Service] Queued media via NanoClaw IPC: ${targetJid} type=${mediaType}`);
+
+    // Store in DB
+    const { error: dbError } = await supabase
+      .from('whatsapp_messages')
+      .insert({
+        wa_message_id: `nanoclaw-ipc-${ipcMessageId}`,
+        wa_phone_number: toPhoneNumber,
+        message_content: caption || `[${mediaType}] ${mediaUrl}`,
+        message_type: mediaType,
+        direction: 'outbound',
+        delivery_status: 'queued',
+        lead_id: leadId || null,
+        client_file_id: clientFileId || null,
+        metadata: { provider: 'nanoclaw-ipc', chat_jid: targetJid, media_url: mediaUrl },
+      });
+
+    if (dbError) {
+      console.error('[WhatsApp Service] DB error storing media message:', dbError);
+      return { success: false, error: `Sent but not recorded: ${dbError.message}` };
+    }
+
+    return { success: true, messageId: `nanoclaw-ipc-${ipcMessageId}`, provider: 'nanoclaw-ipc' } as any;
+  } catch (error) {
+    console.error('[WhatsApp Service] Error sending media:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
