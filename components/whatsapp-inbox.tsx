@@ -135,7 +135,10 @@ export function WhatsAppInbox() {
   const lastSeenMap = useRef<Record<string, string>>({});
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const supabase = createClient();
+  // Singleton Supabase client — createClient() must NOT be called on every render
+  // because @supabase/ssr creates a new object each time, which causes loadMessages
+  // and loadConversations to be recreated every render, triggering an infinite loop.
+  const supabase = useRef(createClient()).current;
 
   // init
   useEffect(() => {
@@ -314,9 +317,10 @@ export function WhatsAppInbox() {
         setMessages(prev => prev.filter(m => m.id !== optId));
         setReplyText(text);
         setSendError(result.error || "Impossible d'envoyer le message");
-      } else {
-        loadMessages(selectedPhone);
       }
+      // On success: the Realtime subscription receives the DB INSERT and replaces
+      // the optimistic message automatically. Calling loadMessages() here would race
+      // against the DB write and wipe the optimistic message before it's committed.
     } catch {
       setSendError('Erreur de connexion');
       setMessages(prev => prev.filter(m => m.id !== optId));
@@ -366,9 +370,8 @@ export function WhatsAppInbox() {
       if (!result.success) {
         setMessages(prev => prev.filter(m => m.id !== optId));
         setSendError(result.error || "Impossible d'envoyer le fichier");
-      } else {
-        loadMessages(selectedPhone);
       }
+      // On success: Realtime handles the message appearing (same as text send)
     } catch {
       setSendError('Erreur de connexion');
     } finally {
