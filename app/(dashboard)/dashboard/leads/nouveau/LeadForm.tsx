@@ -28,6 +28,10 @@ export function LeadForm() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [roomTypes, setRoomTypes] = useState<any[]>([])
 
+  // Dates du séjour (globales, appliquées par défaut à tous les voyageurs)
+  const [sejour_start, setSejourStart] = useState('')
+  const [sejour_end, setSejourEnd] = useState('')
+
   // Voyageur counts
   const [adultsCount, setAdultsCount] = useState(1)
   const [childrenCount, setChildrenCount] = useState(0)
@@ -74,8 +78,6 @@ export function LeadForm() {
   // Quand les compteurs changent, reconstruire la liste voyageurs
   useEffect(() => {
     const newVoyageurs: Voyageur[] = []
-    const defaultArrival = selectedEvent?.arrival_date || ''
-    const defaultDeparture = selectedEvent?.departure_date || ''
 
     for (let i = 0; i < adultsCount; i++) {
       const existing = voyageurs[newVoyageurs.length]
@@ -84,8 +86,8 @@ export function LeadForm() {
         last_name: existing?.last_name || '',
         date_of_birth: existing?.date_of_birth || '',
         type: 'adult',
-        arrival_date: existing?.arrival_date || defaultArrival,
-        departure_date: existing?.departure_date || defaultDeparture,
+        arrival_date: existing?.arrival_date || sejour_start,
+        departure_date: existing?.departure_date || sejour_end,
         room_type_id: existing?.room_type_id || '',
       })
     }
@@ -96,8 +98,8 @@ export function LeadForm() {
         last_name: existing?.last_name || '',
         date_of_birth: existing?.date_of_birth || '',
         type: 'child',
-        arrival_date: existing?.arrival_date || defaultArrival,
-        departure_date: existing?.departure_date || defaultDeparture,
+        arrival_date: existing?.arrival_date || sejour_start,
+        departure_date: existing?.departure_date || sejour_end,
         room_type_id: existing?.room_type_id || '',
       })
     }
@@ -108,32 +110,37 @@ export function LeadForm() {
         last_name: existing?.last_name || '',
         date_of_birth: existing?.date_of_birth || '',
         type: 'baby',
-        arrival_date: existing?.arrival_date || defaultArrival,
-        departure_date: existing?.departure_date || defaultDeparture,
+        arrival_date: existing?.arrival_date || sejour_start,
+        departure_date: existing?.departure_date || sejour_end,
         room_type_id: existing?.room_type_id || '',
       })
     }
 
     setVoyageurs(newVoyageurs.length > 0 ? newVoyageurs : [{
       first_name: '', last_name: '', date_of_birth: '', type: 'adult',
-      arrival_date: defaultArrival, departure_date: defaultDeparture, room_type_id: '',
+      arrival_date: sejour_start, departure_date: sejour_end, room_type_id: '',
     }])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adultsCount, childrenCount, babiesCount])
 
-  // Quand l'événement change, mettre à jour les dates par défaut des voyageurs qui n'ont pas été modifiées
+  // Quand les dates de séjour changent, propager aux voyageurs sans date saisie
   useEffect(() => {
-    if (!selectedEvent) return
     setVoyageurs(prev => prev.map(v => ({
       ...v,
-      arrival_date: v.arrival_date || selectedEvent.arrival_date || '',
-      departure_date: v.departure_date || selectedEvent.departure_date || '',
+      arrival_date: v.arrival_date || sejour_start,
+      departure_date: v.departure_date || sejour_end,
     })))
-  }, [selectedEvent])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sejour_start, sejour_end])
 
   const handleEventChange = (eventId: string) => {
     const event = events.find(e => e.id === eventId)
     setSelectedEvent(event || null)
+    // Pré-remplir les dates de séjour depuis l'événement si pas encore saisies
+    if (event) {
+      if (!sejour_start && event.arrival_date) setSejourStart(event.arrival_date.slice(0, 10))
+      if (!sejour_end && event.departure_date) setSejourEnd(event.departure_date.slice(0, 10))
+    }
   }
 
   const updateVoyageur = (index: number, field: keyof Voyageur, value: string) => {
@@ -176,6 +183,20 @@ export function LeadForm() {
     return { voyageurPrices: prices, totalPrice: Math.round(total * 100) / 100 }
   }, [voyageurs, pricePerNight])
 
+  // Détection automatique : besoin d'une nani si bébé ou enfant < 4 ans
+  const needsNani = useMemo(() => {
+    if (babiesCount > 0) return true
+    const today = new Date()
+    return voyageurs.some(v => {
+      if (v.type !== 'child') return false
+      if (!v.date_of_birth) return false
+      const dob = new Date(v.date_of_birth)
+      const ageMs = today.getTime() - dob.getTime()
+      const ageYears = ageMs / (365.25 * 24 * 3600 * 1000)
+      return ageYears < 4
+    })
+  }, [babiesCount, voyageurs])
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
@@ -187,6 +208,10 @@ export function LeadForm() {
     const voyageursData = voyageurs.filter(v => v.first_name || v.last_name)
     const notesContent = voyageursData.length > 0
       ? `__VOYAGEURS_JSON__${JSON.stringify(voyageursData)}__END_VOYAGEURS__`
+      : ''
+    // Métadonnées séjour séparées
+    const sejourMeta = sejour_start || sejour_end
+      ? `\n__SEJOUR__${JSON.stringify({ start: sejour_start, end: sejour_end, needs_nani: needsNani })}__END_SEJOUR__`
       : ''
 
     // Chambre préférée = celle du premier voyageur (pour compatibilité)
@@ -204,7 +229,9 @@ export function LeadForm() {
       children_count: childrenCount,
       babies_count: babiesCount,
       preferred_room_type_id: preferredRoomTypeId,
-      notes: notesContent + (formData.get('notes') as string || ''),
+      notes: notesContent + sejourMeta
+        + (needsNani && formData.get('nani_notes') ? `\n[Nani] ${formData.get('nani_notes')}` : '')
+        + (formData.get('notes') as string || ''),
     }
 
     const supabase = createClient()
@@ -264,47 +291,41 @@ export function LeadForm() {
         )}
       </div>
 
-      {/* DATES DU SÉJOUR (affichées depuis l'événement) */}
-      {selectedEvent && (
-        <div className="bg-turquoise-50 border border-turquoise-200 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-turquoise-800 mb-3">📅 Dates du séjour (événement)</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <span className="text-turquoise-600">Arrivée :</span>
-              <p className="font-semibold text-gray-900">{formatDate(selectedEvent.arrival_date)}</p>
-            </div>
-            <div>
-              <span className="text-turquoise-600">Départ :</span>
-              <p className="font-semibold text-gray-900">{formatDate(selectedEvent.departure_date)}</p>
-            </div>
-            <div>
-              <span className="text-turquoise-600">Nuits :</span>
-              <p className="font-semibold text-gray-900">{selectedEvent.nights_count || '—'}</p>
-            </div>
+      {/* DATES DU SÉJOUR — obligatoires */}
+      <div className="bg-turquoise-50 border border-turquoise-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-turquoise-800 mb-3">📅 Dates du séjour *</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-turquoise-700 mb-1">Date d&apos;arrivée *</label>
+            <input
+              type="date"
+              required
+              value={sejour_start}
+              onChange={(e) => setSejourStart(e.target.value)}
+              className="w-full px-3 py-2 border border-turquoise-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent bg-white"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-turquoise-700 mb-1">Date de départ *</label>
+            <input
+              type="date"
+              required
+              value={sejour_end}
+              onChange={(e) => setSejourEnd(e.target.value)}
+              min={sejour_start || undefined}
+              className="w-full px-3 py-2 border border-turquoise-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent bg-white"
+            />
           </div>
         </div>
-      )}
-
-      {/* TARIFS DES CHAMBRES (aperçu) */}
-      {selectedEvent && roomTypes.length > 0 && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">🏨 Tarifs des chambres</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {roomTypes.map((pricing: any) => {
-              const rtId = pricing.room_types?.id
-              const ppn = rtId ? pricePerNight[rtId] : null
-              return (
-                <div key={rtId} className="flex items-center justify-between bg-white rounded px-3 py-2 text-sm border border-gray-100">
-                  <span className="font-medium text-gray-800">{pricing.room_types?.name}</span>
-                  <div className="text-right">
-                    <span className="font-bold text-turquoise-600">{pricing.price_per_night} €/nuit</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+        {sejour_start && sejour_end && (
+          <p className="text-xs text-turquoise-600 mt-2">
+            {diffDays(sejour_start, sejour_end)} nuit{diffDays(sejour_start, sejour_end) !== 1 ? 's' : ''}
+            {selectedEvent?.nights_count && diffDays(sejour_start, sejour_end) !== selectedEvent.nights_count && (
+              <span className="ml-2 text-amber-600">(événement : {selectedEvent.nights_count} nuits)</span>
+            )}
+          </p>
+        )}
+      </div>
 
       <div>
         <label htmlFor="source" className="block text-sm font-medium text-gray-700 mb-1">
@@ -436,7 +457,6 @@ export function LeadForm() {
           {voyageurs.map((v, idx) => {
             const typeLabel = v.type === 'adult' ? '🧑 Adulte' : v.type === 'child' ? '👦 Enfant' : '👶 Bébé'
             const nights = diffDays(v.arrival_date, v.departure_date)
-            const roomPricing = roomTypes.find(r => r.room_types?.id === v.room_type_id)
             const ppn = v.room_type_id ? pricePerNight[v.room_type_id] : null
 
             return (
@@ -525,6 +545,25 @@ export function LeadForm() {
           })}
         </div>
       </div>
+
+      {/* NANI — apparaît automatiquement si bébé ou enfant < 4 ans */}
+      {needsNani && (
+        <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-yellow-800 mb-2">👶 Nani requise</h3>
+          <p className="text-xs text-yellow-700 mb-3">
+            Un enfant de moins de 4 ans ou un bébé est détecté dans ce groupe. Une nani sera nécessaire pendant le séjour.
+          </p>
+          <div>
+            <label className="block text-xs font-medium text-yellow-700 mb-1">Besoins / précisions nani</label>
+            <textarea
+              name="nani_notes"
+              rows={2}
+              placeholder="Ex : nani pour 2 enfants de 1 et 3 ans, disponible à partir de 8h..."
+              className="w-full px-3 py-2 border border-yellow-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent bg-white"
+            />
+          </div>
+        </div>
+      )}
 
       {/* RÉCAPITULATIF PRIX */}
       {totalPrice > 0 && (

@@ -16,15 +16,15 @@ export default function Error({
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-lg text-center max-w-md">
-        <h1 className="text-3xl font-bold text-red-600 mb-4">Error</h1>
+        <h1 className="text-3xl font-bold text-red-600 mb-4">Une erreur est survenue</h1>
         <p className="text-gray-700 mb-6">
-          {error.message || 'Something went wrong!'}
+          {error.message || 'Quelque chose s\'est mal passé. Veuillez réessayer.'}
         </p>
         <button
           onClick={() => reset()}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          className="bg-turquoise-600 hover:bg-turquoise-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
         >
-          Try again
+          Réessayer
         </button>
       </div>
     </div>

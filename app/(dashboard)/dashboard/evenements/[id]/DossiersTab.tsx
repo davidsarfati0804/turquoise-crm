@@ -42,11 +42,11 @@ export function DossiersTab({ event }: { event: any }) {
               {dossiers.map((dossier: any) => (
                 <tr key={dossier.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <Link 
+                    <Link
                       href={`/dashboard/dossiers/${dossier.id}`}
                       className="font-medium text-turquoise-600 hover:text-turquoise-800"
                     >
-                      {dossier.reference}
+                      {dossier.file_reference}
                     </Link>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -64,7 +64,7 @@ export function DossiersTab({ event }: { event: any }) {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {dossier.total_price ? `${dossier.total_price.toLocaleString('fr-FR')} €` : '—'}
+                    {dossier.quoted_price ? `${dossier.quoted_price.toLocaleString('fr-FR')} €` : '—'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                     <Link 

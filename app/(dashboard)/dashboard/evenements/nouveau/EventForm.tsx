@@ -81,8 +81,8 @@ export function EventForm() {
       event_type: formData.get('event_type') as string,
       destination_label: formData.get('destination_label') as string,
       status: 'upcoming',
-      start_date: new Date().toISOString(),
-      end_date: new Date().toISOString(),
+      start_date: arrivalDate ? new Date(arrivalDate).toISOString() : new Date().toISOString(),
+      end_date: departureDate ? new Date(departureDate).toISOString() : new Date().toISOString(),
       // New fields
       arrival_date: arrivalDate || null,
       departure_date: departureDate || null,

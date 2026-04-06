@@ -26,8 +26,6 @@ export function ManageDossierActions({
 
   // Charger les autres dossiers de l'événement pour la fusion
   const loadOtherDossiers = async () => {
-    if (!isMergeOpen) return
-
     setLoadingOtherDossiers(true)
     try {
       const response = await fetch(

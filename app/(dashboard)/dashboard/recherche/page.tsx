@@ -30,8 +30,8 @@ export default async function RecherchePage({ searchParams }: { searchParams: Pr
   // Rechercher dans les dossiers
   const { data: dossiers } = await supabase
     .from('client_files')
-    .select('id, file_reference, crm_status, quoted_price, events(name)')
-    .or(`file_reference.ilike.${searchTerm}`)
+    .select('id, file_reference, crm_status, quoted_price, primary_contact_first_name, primary_contact_last_name, events(name)')
+    .or(`file_reference.ilike.${searchTerm},primary_contact_first_name.ilike.${searchTerm},primary_contact_last_name.ilike.${searchTerm}`)
     .limit(20)
 
   // Rechercher dans les événements
@@ -88,7 +88,12 @@ export default async function RecherchePage({ searchParams }: { searchParams: Pr
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-turquoise-600">{d.file_reference}</p>
-                      <p className="text-sm text-gray-500">{d.events?.name || '—'}</p>
+                      <p className="text-sm text-gray-900">
+                        {d.primary_contact_first_name
+                          ? `${d.primary_contact_first_name} ${d.primary_contact_last_name || ''}`
+                          : '—'}
+                      </p>
+                      <p className="text-xs text-gray-500">{d.events?.name || '—'}</p>
                     </div>
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${STATUS_COLORS[d.crm_status] || 'bg-gray-100 text-gray-700'}`}>
                       {CRM_STATUS_LABELS[d.crm_status] || d.crm_status}

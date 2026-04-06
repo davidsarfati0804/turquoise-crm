@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { ToastProvider } from '@/components/shared/toast'
+import { Toaster } from 'sonner'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,16 +32,17 @@ export default async function DashboardLayout({
       <div className="flex h-screen bg-gray-50">
         {/* Sidebar */}
         <Sidebar user={user} profile={profile} />
-        
+
         {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <TopBar user={user} profile={profile} />
-          
+
           <main className="flex-1 overflow-y-auto">
             {children}
           </main>
         </div>
       </div>
+      <Toaster position="bottom-right" richColors />
     </ToastProvider>
   )
 }

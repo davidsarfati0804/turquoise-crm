@@ -5,13 +5,16 @@ export default async function UtilisateursPage() {
   const supabase = await createClient()
 
   const { data: profiles } = await supabase
-    .from('profiles')
+    .from('profils_utilisateurs')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('date_creation', { ascending: false })
 
   const roleLabels: Record<string, string> = {
     admin: 'Administrateur',
     manager: 'Manager',
+    commercial: 'Commercial',
+    utilisateur: 'Utilisateur',
+    // Legacy
     agent: 'Agent',
     viewer: 'Lecteur',
   }
@@ -19,6 +22,9 @@ export default async function UtilisateursPage() {
   const roleBadge: Record<string, string> = {
     admin: 'bg-red-100 text-red-800 border-red-300',
     manager: 'bg-purple-100 text-purple-800 border-purple-300',
+    commercial: 'bg-blue-100 text-blue-800 border-blue-300',
+    utilisateur: 'bg-gray-100 text-gray-800 border-gray-300',
+    // Legacy
     agent: 'bg-blue-100 text-blue-800 border-blue-300',
     viewer: 'bg-gray-100 text-gray-800 border-gray-300',
   }
@@ -54,10 +60,10 @@ export default async function UtilisateursPage() {
           <div className="flex items-center justify-between mb-2">
             <Clock className="w-5 h-5 text-blue-400" />
             <span className="text-2xl font-bold text-gray-900">
-              {profiles?.filter(p => p.role === 'agent').length || 0}
+              {profiles?.filter(p => p.role === 'commercial' || p.role === 'agent').length || 0}
             </span>
           </div>
-          <p className="text-xs font-medium text-gray-600">Agents</p>
+          <p className="text-xs font-medium text-gray-600">Commerciaux / Agents</p>
         </div>
       </div>
 
@@ -97,7 +103,7 @@ export default async function UtilisateursPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {profile.created_at ? new Date(profile.created_at).toLocaleDateString('fr-FR') : '—'}
+                      {profile.date_creation ? new Date(profile.date_creation).toLocaleDateString('fr-FR') : '—'}
                     </td>
                   </tr>
                 ))}

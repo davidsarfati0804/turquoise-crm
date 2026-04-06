@@ -48,9 +48,12 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
         primary_contact_email: email || null,
       }
     } else if (section === 'commercial') {
+      const parsedPrice = quotedPrice ? parseFloat(quotedPrice) : null
+      const amountPaid = clientFile.amount_paid || 0
       updateData = {
         selected_room_type_id: roomTypeId || null,
-        quoted_price: quotedPrice ? parseFloat(quotedPrice) : null,
+        quoted_price: parsedPrice,
+        balance_due: parsedPrice != null ? Math.max(0, parsedPrice - amountPaid) : null,
         adults_count: adultsCount,
         children_count: childrenCount,
         babies_count: babiesCount,

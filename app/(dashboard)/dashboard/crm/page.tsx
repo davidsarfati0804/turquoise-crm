@@ -14,7 +14,7 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
   const { data: clientFiles, error } = await supabase
     .from('client_files')
     .select(`
-      id, file_reference, crm_status, payment_status, quoted_price, updated_at,
+      id, file_reference, crm_status, payment_status, quoted_price, updated_at, created_at,
       primary_contact_first_name, primary_contact_last_name, primary_contact_phone,
       adults_count, children_count, babies_count,
       events (name, start_date),

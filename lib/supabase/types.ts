@@ -91,17 +91,21 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['room_types']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['room_types']['Insert']>
       }
-      profiles: {
+      profils_utilisateurs: {
         Row: {
           id: string
-          email: string | null
           nom_complet: string | null
-          role: 'admin' | 'manager' | 'agent' | 'viewer'
-          created_at: string
-          updated_at: string
+          poste: string | null
+          telephone: string | null
+          avatar_url: string | null
+          role: 'admin' | 'commercial' | 'manager' | 'utilisateur'
+          equipe: string | null
+          actif: boolean
+          date_creation: string
+          date_derniere_connexion: string | null
         }
-        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at' | 'updated_at'>
-        Update: Partial<Database['public']['Tables']['profiles']['Insert']>
+        Insert: Omit<Database['public']['Tables']['profils_utilisateurs']['Row'], 'date_creation'>
+        Update: Partial<Database['public']['Tables']['profils_utilisateurs']['Insert']>
       }
     }
   }
