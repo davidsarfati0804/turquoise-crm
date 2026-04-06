@@ -240,11 +240,11 @@ export async function sendWhatsAppMessage(
     // Derive the target WhatsApp JID from the phone number stored in the DB.
     // Format "lid:XXXXXXXX" means the contact uses a @lid JID (unresolved LID).
     // Baileys 6.17+ can send directly to @lid JIDs.
+    const cleanPhone = toPhoneNumber.startsWith('lid:') ? '' : toPhoneNumber.replace(/\D/g, '');
     let targetJid: string;
     if (toPhoneNumber.startsWith('lid:')) {
       targetJid = `${toPhoneNumber.slice(4)}@lid`;
     } else {
-      const cleanPhone = toPhoneNumber.replace(/\D/g, '');
       targetJid = `${cleanPhone}@s.whatsapp.net`;
     }
 

@@ -328,7 +328,7 @@ export function WhatsAppInbox() {
     } finally {
       setSending(false);
     }
-  }, [replyText, selectedPhone, sending, loadMessages]);
+  }, [replyText, selectedPhone, sending]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -377,7 +377,7 @@ export function WhatsAppInbox() {
     } finally {
       setUploading(false);
     }
-  }, [selectedPhone, replyText, loadMessages]);
+  }, [selectedPhone, replyText]);
 
   const handleDelete = useCallback(async (phone: string) => {
     setDeleting(true);
