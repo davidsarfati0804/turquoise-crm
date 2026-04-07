@@ -46,11 +46,51 @@ export interface AISuggestionResult {
   error?: string;
 }
 
-// ─── Core function ─────────────────────────────────────────────────────────────
+// ─── Core functions ────────────────────────────────────────────────────────────
+
+/**
+ * Save an approved AI response as a few-shot example for future learning.
+ */
+export async function saveApprovedExample(
+  phoneNumber: string,
+  approvedResponse: string,
+  contactName?: string | null,
+): Promise<void> {
+  try {
+    // Fetch last 5 messages as context snapshot
+    const { data: msgs } = await supabase
+      .from('whatsapp_messages')
+      .select('direction, message_content, message_type')
+      .eq('wa_phone_number', phoneNumber)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    const clientLabel = contactName || 'le client';
+    const context = (msgs ?? [])
+      .reverse()
+      .map((m) => {
+        const who = m.direction === 'inbound' ? clientLabel : 'Agent';
+        const content = m.message_type !== 'text' ? `[${m.message_type}]` : m.message_content;
+        return `${who}: ${content}`;
+      })
+      .join('\n');
+
+    await supabase.from('whatsapp_ai_examples').insert({
+      conversation_context: context,
+      good_response: approvedResponse,
+      contact_name: contactName || null,
+    });
+
+    console.log('[WhatsApp AI] Exemple approuvé sauvegardé');
+  } catch (err) {
+    console.error('[WhatsApp AI] Erreur sauvegarde exemple:', err);
+  }
+}
 
 /**
  * Generate a suggested WhatsApp response for a given conversation.
  * Reads the last N messages from DB and asks Claude to write the next reply.
+ * Injects few-shot examples from past approved responses.
  */
 export async function generateWhatsAppSuggestion(
   phoneNumber: string,
@@ -77,22 +117,39 @@ export async function generateWhatsAppSuggestion(
     return { success: false, error: 'Aucun message trouvé pour ce contact' };
   }
 
-  // Build conversation context for Claude
+  // Load last 6 approved examples for few-shot learning
+  const { data: examples } = await supabase
+    .from('whatsapp_ai_examples')
+    .select('conversation_context, good_response')
+    .order('created_at', { ascending: false })
+    .limit(6);
+
+  // Build conversation context
   const clientLabel = contactName ? contactName : 'le client';
   const conversationText = rawMessages
     .map((m) => {
       const who = m.direction === 'inbound' ? clientLabel : 'Turquoise (agent)';
-      const content =
-        m.message_type !== 'text' ? `[${m.message_type}]` : m.message_content;
+      const content = m.message_type !== 'text' ? `[${m.message_type}]` : m.message_content;
       return `${who}: ${content}`;
     })
     .join('\n');
+
+  // Build few-shot block
+  let fewShotBlock = '';
+  if (examples?.length) {
+    const examplesText = examples
+      .map((e, i) =>
+        `--- Exemple ${i + 1} ---\nContexte:\n${e.conversation_context}\nRéponse envoyée:\n${e.good_response}`,
+      )
+      .join('\n\n');
+    fewShotBlock = `\n\nVoici des exemples de bonnes réponses déjà validées par l'équipe :\n\n${examplesText}\n\nInspire-toi de ce style et de ce ton.`;
+  }
 
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 400,
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT + fewShotBlock,
       messages: [
         {
           role: 'user',

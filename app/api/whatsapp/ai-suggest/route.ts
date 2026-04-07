@@ -1,17 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateWhatsAppSuggestion } from '@/lib/services/whatsapp-ai.service';
+import { generateWhatsAppSuggestion, saveApprovedExample } from '@/lib/services/whatsapp-ai.service';
 
 export async function POST(req: NextRequest) {
-  let body: { phoneNumber?: string; contactName?: string | null };
+  let body: {
+    phoneNumber?: string;
+    contactName?: string | null;
+    // If action=approve, save the example instead of generating
+    action?: 'suggest' | 'approve';
+    approvedResponse?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { phoneNumber, contactName } = body;
+  const { phoneNumber, contactName, action, approvedResponse } = body;
   if (!phoneNumber) {
     return NextResponse.json({ error: 'phoneNumber requis' }, { status: 400 });
+  }
+
+  // Save approved example for future learning
+  if (action === 'approve' && approvedResponse) {
+    await saveApprovedExample(phoneNumber, approvedResponse, contactName);
+    return NextResponse.json({ ok: true });
   }
 
   const result = await generateWhatsAppSuggestion(phoneNumber, contactName);

@@ -654,6 +654,17 @@ export function WhatsAppInbox() {
                             const text = aiSuggestion;
                             setAiSuggestion(null);
                             setAiError(null);
+                            // Save as approved example for future learning (fire & forget)
+                            fetch('/api/whatsapp/ai-suggest', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                phoneNumber: selectedPhone,
+                                contactName: selectedConv?.displayName,
+                                action: 'approve',
+                                approvedResponse: text,
+                              }),
+                            }).catch(() => {});
                             const optId = 'opt_' + Date.now();
                             const opt: WhatsAppMessage = {
                               id: optId, wa_phone_number: selectedPhone, wa_display_name: null,

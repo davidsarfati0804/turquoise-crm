@@ -3,9 +3,6 @@
  * Handles incoming messages, outbound messaging, and conversation tracking
  */
 
-import fs from 'fs';
-import path from 'path';
-
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -15,10 +12,6 @@ const whatsappApiUrl = 'https://graph.facebook.com/v19.0';
 const whatsappApiToken = process.env.WHATSAPP_API_TOKEN;
 const whatsappPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const whatsappSendProvider = process.env.WHATSAPP_SEND_PROVIDER;
-
-const nanoclawRoot = process.env.NANOCLAW_ROOT || '/Users/ethan/Documents/nanoclaw';
-const nanoclawMainGroupFolder =
-  process.env.NANOCLAW_MAIN_GROUP_FOLDER || 'whatsapp_main';
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -254,41 +247,27 @@ export async function sendWhatsAppMessage(
     const forceNanoclaw = whatsappSendProvider === 'nanoclaw-ipc' || targetJid.endsWith('@lid');
     const forceCloud = whatsappSendProvider === 'cloud-api' && !targetJid.endsWith('@lid');
 
-    const queueViaNanoclaw = (): {
+    const queueViaNanoclaw = async (): Promise<{
       provider: 'nanoclaw-ipc';
       messageId: string;
-    } => {
-      const ipcMessagesDir = path.join(
-        nanoclawRoot,
-        'data',
-        'ipc',
-        nanoclawMainGroupFolder,
-        'messages',
-      );
-
-      fs.mkdirSync(ipcMessagesDir, { recursive: true });
-
+    }> => {
       const ipcMessageId = `crm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const payload = {
-        type: 'message',
-        chatJid: targetJid,
-        text: messageContent,
-      };
 
-      const finalPath = path.join(ipcMessagesDir, `${ipcMessageId}.json`);
-      const tempPath = `${finalPath}.tmp`;
+      const { error } = await supabase.from('whatsapp_send_queue').insert({
+        id: ipcMessageId.replace('crm-', ''), // use timestamp-random as hint, Supabase generates UUID
+        chat_jid: targetJid,
+        message_type: 'text',
+        message_text: messageContent,
+        status: 'pending',
+      });
 
-      fs.writeFileSync(tempPath, JSON.stringify(payload), 'utf-8');
-      fs.renameSync(tempPath, finalPath);
+      if (error) {
+        console.error('[WhatsApp Service] Failed to queue message in Supabase:', error);
+        throw new Error(`Queue error: ${error.message}`);
+      }
 
-      console.log(
-        `[WhatsApp Service] Queued via NanoClaw IPC for ${targetJid} in ${ipcMessagesDir}`,
-      );
-
-      return {
-        provider: 'nanoclaw-ipc',
-        messageId: `nanoclaw-ipc-${ipcMessageId}`,
-      };
+      console.log(`[WhatsApp Service] Queued via Supabase for ${targetJid}`);
+      return { provider: 'nanoclaw-ipc', messageId: `nanoclaw-ipc-${ipcMessageId}` };
     };
 
     let provider: 'cloud-api' | 'nanoclaw-ipc';
@@ -330,7 +309,7 @@ export async function sendWhatsAppMessage(
         console.warn(
           '[WhatsApp Service] Falling back to NanoClaw IPC because Cloud API failed.',
         );
-        const nanoclawResult = queueViaNanoclaw();
+        const nanoclawResult = await queueViaNanoclaw();
         provider = nanoclawResult.provider;
         messageId = nanoclawResult.messageId;
       } else {
@@ -340,7 +319,7 @@ export async function sendWhatsAppMessage(
           if (forceCloud) {
             return { success: false, error: 'No message ID returned from API' };
           }
-          const nanoclawResult = queueViaNanoclaw();
+          const nanoclawResult = await queueViaNanoclaw();
           provider = nanoclawResult.provider;
           messageId = nanoclawResult.messageId;
         } else {
@@ -356,7 +335,7 @@ export async function sendWhatsAppMessage(
         };
       }
 
-      const nanoclawResult = queueViaNanoclaw();
+      const nanoclawResult = await queueViaNanoclaw();
       provider = nanoclawResult.provider;
       messageId = nanoclawResult.messageId;
     }
@@ -421,23 +400,22 @@ export async function sendWhatsAppMedia(
     const targetJid = toPhoneNumber.startsWith('lid:')
       ? `${toPhoneNumber.slice(4)}@lid`
       : `${toPhoneNumber.replace(/\D/g, '')}@s.whatsapp.net`;
-    const ipcMessagesDir = path.join(nanoclawRoot, 'data', 'ipc', nanoclawMainGroupFolder, 'messages');
     const ipcMessageId = `crm-media-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    const payload = {
-      type: 'media',
-      chatJid: targetJid,
-      mediaUrl,
-      mediaType,
-      caption,
-    };
+    const { error: queueError } = await supabase.from('whatsapp_send_queue').insert({
+      chat_jid: targetJid,
+      message_type: mediaType,
+      media_url: mediaUrl,
+      media_caption: caption || null,
+      status: 'pending',
+    });
 
-    const finalPath = path.join(ipcMessagesDir, `${ipcMessageId}.json`);
-    const tempPath = `${finalPath}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify(payload), 'utf-8');
-    fs.renameSync(tempPath, finalPath);
+    if (queueError) {
+      console.error('[WhatsApp Service] Failed to queue media in Supabase:', queueError);
+      return { success: false, error: `Queue error: ${queueError.message}` };
+    }
 
-    console.log(`[WhatsApp Service] Queued media via NanoClaw IPC: ${targetJid} type=${mediaType}`);
+    console.log(`[WhatsApp Service] Queued media via Supabase: ${targetJid} type=${mediaType}`);
 
     // Store in DB
     const { error: dbError } = await supabase
