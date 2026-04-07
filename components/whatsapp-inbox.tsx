@@ -77,17 +77,26 @@ function normalizePhone(phone: string): string {
   return phone.startsWith('+') ? phone : '+' + phone;
 }
 
-function formatPhone(phone: string): string {
-  if (phone.startsWith('lid:')) return 'Contact WhatsApp';
+function formatPhone(phone: string, displayName?: string | null): string {
+  if (phone.startsWith('lid:')) return displayName || 'Contact WhatsApp';
   const p = normalizePhone(phone);
   if (p.startsWith('+33') && p.length === 12) {
-    // French format: +33 X XX XX XX XX (1 + 4×2 = 9 digits)
     const digits = p.slice(3);
     const first = digits[0];
     const rest = digits.slice(1).match(/.{2}/g) || [];
     return `+33\u00a0${first}\u00a0${rest.join('\u00a0')}`;
   }
   return p;
+}
+
+/** Détecte si un pseudo WhatsApp ressemble à un vrai prénom/nom */
+function isRealName(name: string | null): boolean {
+  if (!name) return false;
+  // Rejette les formats type username (underscores, chiffres dominants, trop court)
+  if (name.includes('_')) return false;
+  if (/\d{3,}/.test(name)) return false;
+  if (name.length < 3) return false;
+  return true;
 }
 
 function getInitials(name: string | null, phone: string): string {
@@ -181,6 +190,8 @@ export function WhatsAppInbox() {
   const lastSeenMap = useRef<Record<string, string>>({});
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Ref to trigger progressive extraction without creating circular deps
+  const progressiveExtractRef = useRef<(phone: string) => void>(() => {});
   // Singleton Supabase client — createClient() must NOT be called on every render
   // because @supabase/ssr creates a new object each time, which causes loadMessages
   // and loadConversations to be recreated every render, triggering an infinite loop.
@@ -329,6 +340,10 @@ export function WhatsAppInbox() {
           return [...prev.filter(m => !m.id.startsWith('opt_')), msg];
         });
         saveLastSeen(selectedPhone);
+        // Progressive extraction: re-analyze on each new inbound message
+        if (msg.direction === 'inbound') {
+          progressiveExtractRef.current(selectedPhone);
+        }
       })
       .subscribe();
 
@@ -492,6 +507,22 @@ export function WhatsAppInbox() {
   useEffect(() => {
     if (selectedPhone) loadClientInfo(selectedPhone);
   }, [selectedPhone, loadClientInfo]);
+
+  // Keep the progressive extract ref up to date
+  useEffect(() => {
+    progressiveExtractRef.current = (phone: string) => {
+      setClientInfo(prev => {
+        if (!prev || prev.leads.length === 0) return prev;
+        const conv = conversations.find(c => c.phone === phone);
+        fetch('/api/whatsapp/extract-lead-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, displayName: conv?.displayName }),
+        }).then(() => loadClientInfo(phone)).catch(() => {});
+        return prev;
+      });
+    };
+  }, [conversations, loadClientInfo]);
 
   const handleCreateLead = useCallback(async () => {
     if (!selectedPhone || creatingLead) return;
@@ -780,7 +811,7 @@ export function WhatsAppInbox() {
                 title="Voir la fiche client"
               >
                 <p className="text-white font-semibold text-sm truncate">
-                  {selectedConv?.displayName || formatPhone(selectedPhone)}
+                  {isRealName(selectedConv?.displayName ?? null) ? selectedConv!.displayName : formatPhone(selectedPhone, selectedConv?.displayName)}
                   {clientInfo && !clientInfo.isKnown && !clientInfoLoading && (
                     <span className="ml-2 text-xs font-normal opacity-70">· Nouveau contact</span>
                   )}
@@ -802,6 +833,20 @@ export function WhatsAppInbox() {
                 <User className="w-4 h-4" />
               </button>
             </div>
+
+            {/* unknown contact banner */}
+            {clientInfo && !clientInfo.isKnown && !clientInfoLoading && (
+              <div className="flex-shrink-0 mx-4 mt-3 mb-1 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                <span className="text-sm text-amber-800 flex-1">Nouveau contact — pas encore dans le CRM</span>
+                <button
+                  onClick={() => { setClientPanel(true); }}
+                  className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline whitespace-nowrap"
+                >
+                  Créer un lead →
+                </button>
+              </div>
+            )}
 
             {/* messages */}
             <div className="flex-1 overflow-y-auto px-6 py-2">

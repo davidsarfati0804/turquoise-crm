@@ -53,9 +53,10 @@ export async function POST(req: NextRequest) {
   const { phone, displayName, extractedInfo } = body;
   if (!phone) return NextResponse.json({ error: 'phone requis' }, { status: 400 });
 
-  // Parse name from displayName ("Rudy Martin" → first=Rudy last=Martin)
-  const nameParts = (displayName || '').trim().split(/\s+/);
-  const firstName = (extractedInfo?.first_name as string) || nameParts[0] || 'Inconnu';
+  // Parse name from displayName only if it looks like a real name (not a username)
+  const isRealDisplayName = displayName && !displayName.includes('_') && !/\d{3,}/.test(displayName) && displayName.length >= 3;
+  const nameParts = isRealDisplayName ? displayName!.trim().split(/\s+/) : [];
+  const firstName = (extractedInfo?.first_name as string) || nameParts[0] || 'Client';
   const lastName = (extractedInfo?.last_name as string) || nameParts.slice(1).join(' ') || 'WhatsApp';
 
   const { data, error } = await supabase

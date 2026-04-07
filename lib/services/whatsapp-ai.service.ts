@@ -90,8 +90,11 @@ export async function extractLeadInfoFromConversation(
     .limit(50);
 
   const eventList = (events ?? []).map((e) => `- ${e.name} (id: ${e.id})`).join('\n');
+  // Only use displayName if it looks like a real name
+  const isRealName = displayName && !displayName.includes('_') && !/\d{3,}/.test(displayName) && displayName.length >= 3;
+  const clientLabel = isRealName ? displayName! : 'Client';
   const convText = msgs
-    .map((m) => `${m.direction === 'inbound' ? (displayName || 'Client') : 'Agent'}: ${m.message_type !== 'text' ? `[${m.message_type}]` : m.message_content}`)
+    .map((m) => `${m.direction === 'inbound' ? clientLabel : 'Agent'}: ${m.message_type !== 'text' ? `[${m.message_type}]` : m.message_content}`)
     .join('\n');
 
   try {
