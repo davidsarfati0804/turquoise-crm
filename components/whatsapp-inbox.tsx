@@ -370,18 +370,10 @@ export function WhatsAppInbox() {
     setAiSuggestion(null);
     try {
       const conv = conversations.find(c => c.phone === selectedPhone);
-      const lead = clientInfo?.leads?.[0];
-      const leadContext = (!clientInfo?.isKnown || (lead && lead.status === 'nouveau')) ? {
-        isNewContact: !clientInfo?.isKnown || (clientInfo.leads.length > 0 && !clientInfo.dossiers.length),
-        hasName: lead ? (lead.first_name !== 'Client' && lead.first_name !== 'Inconnu') : false,
-        hasEvent: lead ? !!lead.event_id : false,
-        hasTravelers: lead ? (lead.adults_count > 1 || lead.children_count > 0 || lead.babies_count > 0) : false,
-        hasDates: false,
-      } : undefined;
       const res = await fetch('/api/whatsapp/ai-suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber: selectedPhone, contactName: conv?.displayName, leadContext }),
+        body: JSON.stringify({ phoneNumber: selectedPhone, contactName: conv?.displayName }),
       });
       const data = await res.json() as { suggestion?: string; error?: string };
       if (!res.ok || !data.suggestion) {

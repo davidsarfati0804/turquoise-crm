@@ -16,41 +16,24 @@ function getAnthropic() {
 
 const SYSTEM_PROMPT = `Tu es l'assistant commercial de Turquoise, une agence de voyages spécialisée dans les voyages de groupe (pèlerinages, mariages, séjours organisés).
 
-Ton rôle : lire la conversation WhatsApp d'un client et rédiger UNE réponse naturelle, chaleureuse et professionnelle, prête à être envoyée par l'agent.
+Ton rôle : lire toute la conversation et rédiger LA réponse la plus pertinente possible, prête à être envoyée par l'agent.
 
-Règles de rédaction :
-- Réponds toujours en français, de façon naturelle et conversationnelle
-- Sois chaleureux mais professionnel (pas trop formel, pas trop familier)
-- Réponds directement à ce que le client a dit/demandé
-- Si le client cherche des infos sur un séjour : demande ce qui manque (nombre de personnes, dates, type de chambre)
-- Si le client donne des infos : confirme-les et avance vers l'étape suivante (proposition de prix, formulaire d'inscription)
-- Reste concis : 2-4 lignes maximum, jamais de longs paragraphes
-- N'utilise pas d'émojis sauf si le client en utilise lui-même
-- Ne mentionne JAMAIS que tu es une IA ou un assistant automatique
-- Ne promets pas de tarifs précis si tu n'as pas l'info
-- Si le client demande un tarif et que tu n'as pas l'info : dis que tu vas revenir vers lui avec une proposition
+Comment raisonner avant de répondre :
+1. Lis toute la conversation et identifie ce que tu sais déjà : prénom/nom du client, l'événement mentionné, le nombre de personnes, les dates.
+2. Identifie ce qui manque encore pour pouvoir avancer (faire un devis, envoyer un formulaire).
+3. Réponds d'abord au message du client, puis si pertinent, glisse naturellement UNE question pour obtenir l'info manquante la plus importante.
+4. Ne pose JAMAIS plusieurs questions d'un coup. Une seule, intégrée naturellement dans la réponse.
+5. Si le client a déjà donné son nom, ne le redemande pas. Si l'événement est clair, confirme-le.
 
-Format de ta réponse : texte brut uniquement, sans guillemets ni formatage markdown.`;
+Style :
+- Français naturel, chaleureux, pas trop formel
+- 2-4 lignes maximum
+- Pas d'émojis sauf si le client en utilise
+- Jamais de liste à puces, jamais de "1. 2. 3."
+- Ne mentionne pas que tu es une IA
+- Ne donne pas de tarif précis si tu ne l'as pas
 
-/**
- * Prompt spécial pour collecter les infos d'un nouveau contact.
- * Adapte la question au prochain champ manquant.
- */
-function buildLeadGatheringPrompt(missingFields: string[]): string {
-  const next = missingFields[0];
-  const questionMap: Record<string, string> = {
-    name: 'Demande naturellement le prénom et le nom du client.',
-    event: 'Demande pour quel événement ou voyage il souhaite se renseigner.',
-    travelers: 'Demande combien de personnes voyagent avec lui (adultes, enfants, bébés).',
-    dates: 'Demande les dates de séjour souhaitées.',
-  };
-
-  return `Tu es l'assistant commercial de Turquoise, une agence de voyages de groupe.
-C'est un nouveau contact, tu dois collecter ses informations progressivement.
-${next ? `Prochaine information à collecter : ${questionMap[next] || 'demande plus de détails.'}` : 'Tu as déjà toutes les infos de base, remercie et propose la prochaine étape.'}
-Réponds en 1-2 phrases maximum, en français, de façon naturelle et chaleureuse.
-Texte brut uniquement, sans guillemets ni markdown.`;
-}
+Format : texte brut uniquement, sans guillemets ni markdown.`;
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -192,13 +175,6 @@ export async function saveApprovedExample(
 export async function generateWhatsAppSuggestion(
   phoneNumber: string,
   contactName?: string | null,
-  leadContext?: {
-    isNewContact: boolean;
-    hasName: boolean;
-    hasEvent: boolean;
-    hasTravelers: boolean;
-    hasDates: boolean;
-  },
 ): Promise<AISuggestionResult> {
   const anthropic = getAnthropic();
   if (!anthropic) {
@@ -238,28 +214,17 @@ export async function generateWhatsAppSuggestion(
     })
     .join('\n');
 
-  // Determine system prompt — use lead-gathering if new contact
-  let systemPrompt: string;
-  if (leadContext?.isNewContact) {
-    const missing: string[] = [];
-    if (!leadContext.hasName) missing.push('name');
-    if (!leadContext.hasEvent) missing.push('event');
-    if (!leadContext.hasTravelers) missing.push('travelers');
-    if (!leadContext.hasDates) missing.push('dates');
-    systemPrompt = buildLeadGatheringPrompt(missing);
-  } else {
-    // Build few-shot block for returning clients
-    let fewShotBlock = '';
-    if (examples?.length) {
-      const examplesText = examples
-        .map((e, i) =>
-          `--- Exemple ${i + 1} ---\nContexte:\n${e.conversation_context}\nRéponse envoyée:\n${e.good_response}`,
-        )
-        .join('\n\n');
-      fewShotBlock = `\n\nVoici des exemples de bonnes réponses déjà validées par l'équipe :\n\n${examplesText}\n\nInspire-toi de ce style et de ce ton.`;
-    }
-    systemPrompt = SYSTEM_PROMPT + fewShotBlock;
+  // Build few-shot block from approved examples
+  let fewShotBlock = '';
+  if (examples?.length) {
+    const examplesText = examples
+      .map((e, i) =>
+        `--- Exemple ${i + 1} ---\nContexte:\n${e.conversation_context}\nRéponse envoyée:\n${e.good_response}`,
+      )
+      .join('\n\n');
+    fewShotBlock = `\n\nExemples de bonnes réponses déjà validées par l'équipe (inspire-toi du style et du ton) :\n\n${examplesText}`;
   }
+  const systemPrompt = SYSTEM_PROMPT + fewShotBlock;
 
   try {
     const response = await Promise.race([

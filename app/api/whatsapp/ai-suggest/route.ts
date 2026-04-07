@@ -7,13 +7,6 @@ export async function POST(req: NextRequest) {
     contactName?: string | null;
     action?: 'suggest' | 'approve';
     approvedResponse?: string;
-    leadContext?: {
-      isNewContact: boolean;
-      hasName: boolean;
-      hasEvent: boolean;
-      hasTravelers: boolean;
-      hasDates: boolean;
-    };
   };
   try {
     body = await req.json();
@@ -21,7 +14,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { phoneNumber, contactName, action, approvedResponse, leadContext } = body;
+  const { phoneNumber, contactName, action, approvedResponse } = body;
   if (!phoneNumber) {
     return NextResponse.json({ error: 'phoneNumber requis' }, { status: 400 });
   }
@@ -32,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const result = await generateWhatsAppSuggestion(phoneNumber, contactName, leadContext);
+  const result = await generateWhatsAppSuggestion(phoneNumber, contactName);
 
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 500 });
