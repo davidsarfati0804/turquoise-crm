@@ -6,7 +6,7 @@ import {
   Send, Loader2, MessageSquare, Trash2, Check, CheckCheck,
   Paperclip, Search, X, Image as ImageIcon, FileText, Video,
   Sparkles, RefreshCw, UserPlus, ChevronRight, ExternalLink,
-  User, FolderOpen, AlertCircle,
+  User, FolderOpen, AlertCircle, Pencil,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -186,6 +186,9 @@ export function WhatsAppInbox() {
   const [creatingLead, setCreatingLead] = useState(false);
   const [pendingExtraction, setPendingExtraction] = useState<Record<string, string | number>>({});
   const [validatingField, setValidatingField] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [validatedFields, setValidatedFields] = useState<Set<string>>(new Set());
 
   const selectedPhoneRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -360,6 +363,8 @@ export function WhatsAppInbox() {
     setClientPanel(false);
     setClientInfo(null);
     setPendingExtraction({});
+    setEditingField(null);
+    setValidatedFields(new Set());
     setConversations(prev => prev.map(c => c.phone === phone ? { ...c, unreadCount: 0 } : c));
   }, []);
 
@@ -693,9 +698,17 @@ export function WhatsAppInbox() {
                 </div>
                 <div className="min-w-0">
                   <p className="font-semibold text-gray-900 truncate">
-                    {selectedConv?.displayName || formatPhone(selectedPhone)}
+                    {isRealName(selectedConv?.displayName ?? null)
+                      ? selectedConv!.displayName
+                      : (clientInfo.leads[0] && clientInfo.leads[0].first_name !== 'Client'
+                        ? `${clientInfo.leads[0].first_name} ${clientInfo.leads[0].last_name}`
+                        : 'Nouveau contact')}
                   </p>
-                  <p className="text-xs text-gray-500">{formatPhone(selectedPhone)}</p>
+                  <p className="text-xs text-gray-500">
+                    {selectedPhone.startsWith('lid:')
+                      ? 'Identifiant interne WhatsApp'
+                      : formatPhone(selectedPhone)}
+                  </p>
                 </div>
               </div>
 
@@ -719,84 +732,163 @@ export function WhatsAppInbox() {
                 </div>
               )}
 
-              {/* Progressive lead form — shown when lead exists with status nouveau */}
-              {clientInfo.leads.length > 0 && clientInfo.leads[0].status === 'nouveau' && (
-                <div className="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 bg-gray-100 border-b border-gray-200">
-                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Fiche en cours</span>
-                    {Object.keys(pendingExtraction).length > 0 && (
-                      <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                        {Object.keys(pendingExtraction).length} nouveau{Object.keys(pendingExtraction).length > 1 ? 'x' : ''}
-                      </span>
-                    )}
-                  </div>
-                  <div className="divide-y divide-gray-100">
-                    {[
-                      { key: 'first_name', label: 'Prénom', value: clientInfo.leads[0].first_name !== 'Client' ? clientInfo.leads[0].first_name : null },
-                      { key: 'last_name', label: 'Nom', value: clientInfo.leads[0].last_name !== 'WhatsApp' ? clientInfo.leads[0].last_name : null },
-                      { key: 'event', label: 'Événement', value: clientInfo.leads[0].events?.name || null },
-                      { key: 'travelers', label: 'Voyageurs', value: clientInfo.leads[0].adults_count > 1 || clientInfo.leads[0].children_count > 0 ? `${clientInfo.leads[0].adults_count} ad.${clientInfo.leads[0].children_count ? ` ${clientInfo.leads[0].children_count} enf.` : ''}${clientInfo.leads[0].babies_count ? ` ${clientInfo.leads[0].babies_count} bb.` : ''}` : null },
-                    ].map(({ key, label, value }) => {
-                      const pending = pendingExtraction[key] ?? pendingExtraction[key === 'event' ? 'event_name_detected' : key === 'travelers' ? 'adults_count' : key];
-                      const hasPending = pending !== undefined && String(pending) !== value;
-                      return (
-                        <div key={key} className={`flex items-center gap-2 px-3 py-2 ${hasPending ? 'bg-amber-50' : ''}`}>
-                          <span className="text-xs text-gray-500 w-20 flex-shrink-0">{label}</span>
-                          <span className={`text-xs flex-1 ${value ? 'text-gray-900 font-medium' : 'text-gray-300 italic'}`}>
-                            {hasPending ? String(pending) : (value || '—')}
-                          </span>
-                          {hasPending && (
-                            <div className="flex gap-1">
-                              <button
-                                onClick={async () => {
-                                  if (validatingField) return;
-                                  setValidatingField(key);
-                                  const lead = clientInfo.leads[0];
-                                  const update: Record<string, unknown> = {};
-                                  if (key === 'first_name') update.first_name = pending;
-                                  if (key === 'last_name') update.last_name = pending;
-                                  if (key === 'event') update.event_id = pendingExtraction.event_id;
-                                  if (key === 'travelers') {
-                                    update.adults_count = pendingExtraction.adults_count;
-                                    update.children_count = pendingExtraction.children_count ?? 0;
-                                    update.babies_count = pendingExtraction.babies_count ?? 0;
-                                  }
-                                  await fetch('/api/whatsapp/client-info', {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ leadId: lead.id, ...update }),
-                                  });
-                                  setPendingExtraction(prev => {
-                                    const next = { ...prev };
-                                    delete next[key];
-                                    delete next['event_name_detected'];
-                                    delete next['event_id'];
-                                    return next;
-                                  });
-                                  await loadClientInfo(selectedPhone);
-                                  setValidatingField(null);
-                                }}
-                                disabled={validatingField === key}
-                                className="w-5 h-5 rounded-full bg-green-500 hover:bg-green-600 text-white flex items-center justify-center flex-shrink-0"
-                                title="Valider"
-                              >
-                                {validatingField === key ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                              </button>
-                              <button
-                                onClick={() => setPendingExtraction(prev => { const n = { ...prev }; delete n[key]; return n; })}
-                                className="w-5 h-5 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 flex items-center justify-center flex-shrink-0"
-                                title="Ignorer"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
+              {/* Progressive lead form */}
+              {clientInfo.leads.length > 0 && clientInfo.leads[0].status === 'nouveau' && (() => {
+                const lead = clientInfo.leads[0];
+                const fields = [
+                  { key: 'first_name', label: 'Prénom', value: lead.first_name !== 'Client' ? lead.first_name : null, dbKey: 'first_name' },
+                  { key: 'last_name', label: 'Nom', value: lead.last_name !== 'WhatsApp' ? lead.last_name : null, dbKey: 'last_name' },
+                  { key: 'phone', label: 'Téléphone', value: selectedPhone.startsWith('lid:') ? null : formatPhone(selectedPhone), dbKey: null, readOnly: true },
+                  { key: 'event', label: 'Événement', value: lead.events?.name || null, dbKey: 'event_id', readOnly: true },
+                  { key: 'travelers', label: 'Voyageurs', value: lead.adults_count > 1 || lead.children_count > 0 || lead.babies_count > 0
+                    ? `${lead.adults_count} ad.${lead.children_count ? ` ${lead.children_count} enf.` : ''}${lead.babies_count ? ` ${lead.babies_count} bb.` : ''}`
+                    : null, dbKey: null, readOnly: true },
+                ];
+
+                return (
+                  <div className="rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50">
+                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Fiche en cours</span>
+                      {Object.keys(pendingExtraction).length > 0 && (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full animate-pulse">
+                          {Object.keys(pendingExtraction).filter(k => !['event_id','sejour_start','sejour_end','notes'].includes(k)).length} détecté{Object.keys(pendingExtraction).length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {fields.map(({ key, label, value, dbKey, readOnly }) => {
+                        const pendingVal = pendingExtraction[key] ?? (key === 'event' ? pendingExtraction.event_name_detected : undefined);
+                        const hasPending = pendingVal !== undefined && String(pendingVal) !== value;
+                        const isValidated = validatedFields.has(key);
+                        const isEditing = editingField === key;
+
+                        return (
+                          <div key={key} className={`px-3 py-2 ${hasPending ? 'bg-amber-50' : ''}`}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-gray-400 w-18 flex-shrink-0">{label}</span>
+
+                              {isEditing ? (
+                                <div className="flex-1 flex items-center gap-1">
+                                  <input
+                                    autoFocus
+                                    value={editValue}
+                                    onChange={e => setEditValue(e.target.value)}
+                                    onKeyDown={async e => {
+                                      if (e.key === 'Escape') { setEditingField(null); return; }
+                                      if (e.key === 'Enter' && dbKey) {
+                                        setValidatingField(key);
+                                        await fetch('/api/whatsapp/client-info', {
+                                          method: 'PATCH',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ leadId: lead.id, [dbKey]: editValue }),
+                                        });
+                                        setValidatedFields(prev => new Set([...prev, key]));
+                                        setEditingField(null);
+                                        await loadClientInfo(selectedPhone);
+                                        setValidatingField(null);
+                                      }
+                                    }}
+                                    className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 outline-none focus:border-teal-500"
+                                    placeholder={`Saisir ${label.toLowerCase()}...`}
+                                  />
+                                  <button
+                                    onClick={async () => {
+                                      if (!dbKey) { setEditingField(null); return; }
+                                      setValidatingField(key);
+                                      await fetch('/api/whatsapp/client-info', {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ leadId: lead.id, [dbKey]: editValue }),
+                                      });
+                                      setValidatedFields(prev => new Set([...prev, key]));
+                                      setEditingField(null);
+                                      await loadClientInfo(selectedPhone);
+                                      setValidatingField(null);
+                                    }}
+                                    className="w-5 h-5 rounded bg-teal-600 text-white flex items-center justify-center flex-shrink-0"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingField(null)}
+                                    className="w-5 h-5 rounded bg-gray-200 text-gray-500 flex items-center justify-center flex-shrink-0"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className={`text-xs flex-1 ${hasPending ? 'text-amber-800 font-medium' : value ? (isValidated ? 'text-green-700 font-medium' : 'text-gray-900') : 'text-gray-300 italic'}`}>
+                                    {hasPending ? String(pendingVal) : (value || '—')}
+                                  </span>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    {isValidated && !hasPending && (
+                                      <Check className="w-3 h-3 text-green-500" />
+                                    )}
+                                    {hasPending && (
+                                      <>
+                                        <button
+                                          onClick={async () => {
+                                            if (validatingField) return;
+                                            setValidatingField(key);
+                                            const update: Record<string, unknown> = {};
+                                            if (key === 'first_name') update.first_name = pendingVal;
+                                            if (key === 'last_name') update.last_name = pendingVal;
+                                            if (key === 'event') update.event_id = pendingExtraction.event_id;
+                                            if (key === 'travelers') {
+                                              update.adults_count = pendingExtraction.adults_count;
+                                              update.children_count = pendingExtraction.children_count ?? 0;
+                                              update.babies_count = pendingExtraction.babies_count ?? 0;
+                                            }
+                                            await fetch('/api/whatsapp/client-info', {
+                                              method: 'PATCH',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ leadId: lead.id, ...update }),
+                                            });
+                                            setValidatedFields(prev => new Set([...prev, key]));
+                                            setPendingExtraction(prev => {
+                                              const n = { ...prev };
+                                              delete n[key]; delete n.event_name_detected; delete n.event_id;
+                                              return n;
+                                            });
+                                            await loadClientInfo(selectedPhone);
+                                            setValidatingField(null);
+                                          }}
+                                          disabled={!!validatingField}
+                                          className="w-5 h-5 rounded-full bg-green-500 hover:bg-green-600 text-white flex items-center justify-center"
+                                          title="Valider"
+                                        >
+                                          {validatingField === key ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                        </button>
+                                        <button
+                                          onClick={() => setPendingExtraction(prev => { const n = { ...prev }; delete n[key]; return n; })}
+                                          className="w-5 h-5 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 flex items-center justify-center"
+                                          title="Ignorer"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </>
+                                    )}
+                                    {!hasPending && !readOnly && (
+                                      <button
+                                        onClick={() => { setEditingField(key); setEditValue(value || ''); }}
+                                        className="w-5 h-5 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 flex items-center justify-center"
+                                        title="Modifier"
+                                      >
+                                        <Pencil className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Leads */}
               {clientInfo.leads.length > 0 && (
