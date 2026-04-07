@@ -33,7 +33,7 @@ export async function POST(
         )
       `)
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (biError || !bi) {
       return NextResponse.json(

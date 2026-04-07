@@ -27,7 +27,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       )
     `)
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (error || !event) {
     notFound()

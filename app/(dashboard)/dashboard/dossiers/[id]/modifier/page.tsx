@@ -12,7 +12,7 @@ export default async function EditDossierPage({ params }: { params: Promise<{ id
     .from('client_files')
     .select('*, events (id, name), leads (id, first_name, last_name)')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (error || !clientFile) {
     notFound()

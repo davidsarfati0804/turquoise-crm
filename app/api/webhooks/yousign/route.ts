@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       .from('bulletin_inscriptions')
       .select('*')
       .eq('yousign_signature_request_id', signatureRequestId)
-      .single()
+      .maybeSingle()
 
     if (error || !bi) {
       console.error('Webhook: BI not found for signature request', signatureRequestId)

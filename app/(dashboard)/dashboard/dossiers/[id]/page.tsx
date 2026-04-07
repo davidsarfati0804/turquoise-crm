@@ -28,7 +28,7 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
       internal_notes (*)
     `)
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (error || !clientFile) {
     notFound()

@@ -102,7 +102,7 @@ export function EventForm() {
       .from('events')
       .insert([data])
       .select()
-      .single()
+      .maybeSingle()
 
     if (insertError || !event) {
       console.error('Error creating event:', insertError)

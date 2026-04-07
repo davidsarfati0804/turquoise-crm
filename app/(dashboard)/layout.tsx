@@ -25,7 +25,7 @@ export default async function DashboardLayout({
     .from('profils_utilisateurs')
     .select('*')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
   return (
     <ToastProvider>

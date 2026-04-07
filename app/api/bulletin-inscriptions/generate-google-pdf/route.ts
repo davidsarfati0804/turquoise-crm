@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       .from('bulletin_inscriptions')
       .select('*')
       .eq('id', bi_id)
-      .single()
+      .maybeSingle()
 
     if (error || !bi) {
       return NextResponse.json({ error: 'BI non trouvé' }, { status: 404 })

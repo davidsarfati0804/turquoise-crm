@@ -12,7 +12,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
     .from('leads')
     .select('*, events (id, name, destination_label)')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (error || !lead) {
     notFound()

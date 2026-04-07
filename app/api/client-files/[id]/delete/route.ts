@@ -20,7 +20,7 @@ export async function DELETE(
       .from('client_files')
       .select('id, file_reference')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (fetchError || !clientFile) {
       return NextResponse.json({ error: 'Dossier non trouvé' }, { status: 404 })

@@ -15,6 +15,7 @@ export default async function DossiersPage() {
       leads (first_name, last_name, phone, email)
     `)
     .order('updated_at', { ascending: false })
+    .limit(200)
 
   if (error) {
     console.error('Error fetching dossiers:', error)

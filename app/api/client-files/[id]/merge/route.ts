@@ -29,13 +29,13 @@ export async function POST(
       .from('client_files')
       .select('*')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     const { data: targetFile, error: targetFetchError } = await supabase
       .from('client_files')
       .select('*')
       .eq('id', mergeWithId)
-      .single()
+      .maybeSingle()
 
     if (sourceFetchError || !sourceFile || targetFetchError || !targetFile) {
       return NextResponse.json(

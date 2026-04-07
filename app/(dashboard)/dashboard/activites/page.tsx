@@ -12,6 +12,7 @@ export default async function ActivitesPage() {
       clients (nom)
     `)
     .order('date_debut', { ascending: false })
+    .limit(200)
 
   const typeIcons: Record<string, string> = {
     appel: '📞',

@@ -44,7 +44,7 @@ export function ConvertToFileButton({ lead }: { lead: any }) {
         .from('events')
         .select('nights_count, arrival_date, departure_date')
         .eq('id', lead.event_id)
-        .single()
+        .maybeSingle()
 
       // Calculer les nuits de l'événement depuis les dates si nights_count absent
       let eventNights = event?.nights_count || 0
@@ -91,7 +91,7 @@ export function ConvertToFileButton({ lead }: { lead: any }) {
           .select('price_per_night')
           .eq('event_id', lead.event_id)
           .eq('room_type_id', lead.preferred_room_type_id)
-          .single()
+          .maybeSingle()
         const ppn = (pricing as any)?.price_per_night ?? (pricing as any)?.price_per_room ?? (pricing as any)?.price_per_person
         if (ppn != null && ppn > 0) {
           quotedPrice = Math.round(ppn * eventNights * 100) / 100
@@ -121,7 +121,7 @@ export function ConvertToFileButton({ lead }: { lead: any }) {
         payment_status: 'pending'
       }])
       .select()
-      .single()
+      .maybeSingle()
 
     if (fileError) {
       console.error('Error creating client file:', fileError)

@@ -15,6 +15,7 @@ export default async function LeadsPage() {
     `)
     .is('converted_to_file_id', null)
     .order('created_at', { ascending: false })
+    .limit(200)
 
   if (error) {
     console.error('Error fetching leads:', error)

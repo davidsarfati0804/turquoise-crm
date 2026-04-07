@@ -12,7 +12,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
     .from('events')
     .select('*')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (error || !event) {
     notFound()

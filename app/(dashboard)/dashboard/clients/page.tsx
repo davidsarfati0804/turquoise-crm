@@ -10,6 +10,7 @@ export default async function ClientsPage() {
     .from('clients')
     .select('*')
     .order('date_creation', { ascending: false })
+    .limit(200)
 
   return (
     <div className="p-8">

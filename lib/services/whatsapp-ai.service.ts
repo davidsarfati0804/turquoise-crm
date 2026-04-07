@@ -146,17 +146,22 @@ export async function generateWhatsAppSuggestion(
   }
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 400,
-      system: SYSTEM_PROMPT + fewShotBlock,
-      messages: [
-        {
-          role: 'user',
-          content: `Voici la conversation WhatsApp avec ${clientLabel}:\n\n${conversationText}\n\nRédige la prochaine réponse de l'agent Turquoise.`,
-        },
-      ],
-    });
+    const response = await Promise.race([
+      anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 400,
+        system: SYSTEM_PROMPT + fewShotBlock,
+        messages: [
+          {
+            role: 'user',
+            content: `Voici la conversation WhatsApp avec ${clientLabel}:\n\n${conversationText}\n\nRédige la prochaine réponse de l'agent Turquoise.`,
+          },
+        ],
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Claude timeout après 20s')), 20000),
+      ),
+    ]);
 
     const suggestion =
       response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;

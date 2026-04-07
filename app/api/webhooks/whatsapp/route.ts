@@ -113,7 +113,7 @@ async function createLeadFromMessage(
       notes: `Initial WhatsApp message: ${messageContent.substring(0, 200)}`,
     })
     .select('id')
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error('Error creating lead:', error);

@@ -191,7 +191,8 @@ export function WhatsAppInbox() {
     const { data, error } = await supabase
       .from('whatsapp_messages')
       .select('wa_phone_number, wa_display_name, message_content, message_type, direction, created_at')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(1000);
 
     if (error) { console.error('loadConversations:', error); setLoading(false); return; }
 
@@ -254,7 +255,8 @@ export function WhatsAppInbox() {
       .from('whatsapp_messages')
       .select('*')
       .eq('wa_phone_number', phone)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(200);
 
     if (!error && data) {
       const lastSeen = lastSeenMap.current[phone];

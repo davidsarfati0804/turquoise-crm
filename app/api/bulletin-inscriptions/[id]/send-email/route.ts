@@ -28,7 +28,7 @@ export async function POST(
       .from('bulletin_inscriptions')
       .select('*')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (biError || !bi) {
       return NextResponse.json(

@@ -22,6 +22,7 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
       room_types (name)
     `)
     .order('updated_at', { ascending: false })
+    .limit(200)
 
   if (error) {
     console.error('Error fetching client files:', error)

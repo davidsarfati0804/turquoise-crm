@@ -16,6 +16,7 @@ export default async function PaiementsPage() {
       leads (first_name, last_name, phone)
     `)
     .order('updated_at', { ascending: false })
+    .limit(200)
 
   const all = dossiers || []
   const pending = all.filter(d => d.payment_status === 'pending')

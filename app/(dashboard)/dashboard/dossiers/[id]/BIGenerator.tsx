@@ -30,7 +30,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
         .eq('client_file_id', clientFile.id)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
       if (existingBI) {
         setGeneratedBI(existingBI)
@@ -63,7 +63,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
         .from('events')
         .select('*')
         .eq('id', clientFile.event_id)
-        .single()
+        .maybeSingle()
 
       let roomType = null
       let pricing = null
@@ -73,7 +73,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
           .from('room_types')
           .select('*')
           .eq('id', clientFile.selected_room_type_id)
-          .single()
+          .maybeSingle()
         roomType = rt
 
         const { data: pr } = await supabase
@@ -81,7 +81,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
           .select('*')
           .eq('event_id', clientFile.event_id)
           .eq('room_type_id', clientFile.selected_room_type_id)
-          .single()
+          .maybeSingle()
         pricing = pr
       }
 
@@ -164,7 +164,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
           generated_by: user?.id || null,
         })
         .select()
-        .single()
+        .maybeSingle()
 
       if (error) {
         console.error('Error saving BI:', JSON.stringify(error))
@@ -191,7 +191,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
         .from('bulletin_inscriptions')
         .select('google_doc_url')
         .eq('id', savedBI.id)
-        .single()
+        .maybeSingle()
 
       if (updatedBI?.google_doc_url) {
         setGoogleDocUrl(updatedBI.google_doc_url)
