@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/client';
 import {
   Send, Loader2, MessageSquare, Trash2, Check, CheckCheck,
   Paperclip, Search, X, Image as ImageIcon, FileText, Video,
-  Sparkles, RefreshCw,
+  Sparkles, RefreshCw, UserPlus, ChevronRight, ExternalLink,
+  User, FolderOpen, AlertCircle,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -20,6 +21,43 @@ interface WhatsAppMessage {
   direction: 'inbound' | 'outbound';
   delivery_status: string;
   created_at: string;
+}
+
+interface LeadRecord {
+  id: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  status: string;
+  source: string;
+  adults_count: number;
+  children_count: number;
+  babies_count: number;
+  notes: string | null;
+  created_at: string;
+  converted_to_file_id: string | null;
+  event_id: string | null;
+  events: { name: string } | null;
+}
+
+interface DossierRecord {
+  id: string;
+  file_reference: string;
+  primary_contact_first_name: string;
+  primary_contact_last_name: string;
+  crm_status: string;
+  payment_status: string | null;
+  quoted_price: number | null;
+  amount_paid: number | null;
+  created_at: string;
+  event_id: string;
+  events: { name: string; start_date: string } | null;
+}
+
+interface ClientInfo {
+  leads: LeadRecord[];
+  dossiers: DossierRecord[];
+  isKnown: boolean;
 }
 
 interface Conversation {
@@ -133,6 +171,10 @@ export function WhatsAppInbox() {
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [clientPanel, setClientPanel] = useState(false);
+  const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
+  const [clientInfoLoading, setClientInfoLoading] = useState(false);
+  const [creatingLead, setCreatingLead] = useState(false);
 
   const selectedPhoneRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -298,6 +340,8 @@ export function WhatsAppInbox() {
     setSendError(null);
     setAiSuggestion(null);
     setAiError(null);
+    setClientPanel(false);
+    setClientInfo(null);
     setConversations(prev => prev.map(c => c.phone === phone ? { ...c, unreadCount: 0 } : c));
   }, []);
 
@@ -431,6 +475,51 @@ export function WhatsAppInbox() {
     }
   }, [selectedPhone]);
 
+  const loadClientInfo = useCallback(async (phone: string) => {
+    setClientInfoLoading(true);
+    setClientInfo(null);
+    try {
+      const res = await fetch('/api/whatsapp/client-info?phone=' + encodeURIComponent(phone));
+      const data = await res.json() as ClientInfo;
+      setClientInfo(data);
+    } catch {
+      setClientInfo({ leads: [], dossiers: [], isKnown: false });
+    } finally {
+      setClientInfoLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedPhone) loadClientInfo(selectedPhone);
+  }, [selectedPhone, loadClientInfo]);
+
+  const handleCreateLead = useCallback(async () => {
+    if (!selectedPhone || creatingLead) return;
+    setCreatingLead(true);
+    try {
+      const conv = conversations.find(c => c.phone === selectedPhone);
+      const res = await fetch('/api/whatsapp/client-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: selectedPhone, displayName: conv?.displayName }),
+      });
+      if (res.ok) {
+        // Reload client info + trigger AI extraction in background
+        await loadClientInfo(selectedPhone);
+        // Trigger AI extraction to fill in details
+        fetch('/api/whatsapp/extract-lead-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: selectedPhone, displayName: conv?.displayName }),
+        }).catch(() => {});
+      }
+    } catch {
+      // silent
+    } finally {
+      setCreatingLead(false);
+    }
+  }, [selectedPhone, creatingLead, conversations, loadClientInfo]);
+
   const selectedConv = conversations.find(c => c.phone === selectedPhone);
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0);
 
@@ -535,24 +624,183 @@ export function WhatsAppInbox() {
         </div>
       </div>
 
+      {/* ── client panel ── */}
+      {clientPanel && selectedPhone && (
+        <div className="w-[300px] flex-shrink-0 flex flex-col bg-white border-l shadow-xl overflow-y-auto">
+          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ backgroundColor: WA_DARK }}>
+            <span className="text-white font-semibold text-sm">Fiche client</span>
+            <button onClick={() => setClientPanel(false)} className="text-white opacity-70 hover:opacity-100">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {clientInfoLoading && (
+            <div className="flex items-center justify-center h-24">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+            </div>
+          )}
+
+          {!clientInfoLoading && clientInfo && (
+            <div className="flex flex-col gap-4 p-4">
+              {/* Contact info */}
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0"
+                  style={{ backgroundColor: avatarColor(selectedPhone) }}>
+                  {getInitials(selectedConv?.displayName || null, selectedPhone)}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">
+                    {selectedConv?.displayName || formatPhone(selectedPhone)}
+                  </p>
+                  <p className="text-xs text-gray-500">{formatPhone(selectedPhone)}</p>
+                </div>
+              </div>
+
+              {/* Nouveau contact */}
+              {!clientInfo.isKnown && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    <span className="text-sm font-medium text-amber-800">Nouveau contact</span>
+                  </div>
+                  <p className="text-xs text-amber-700 mb-3">Ce numéro n&apos;est pas encore dans le CRM.</p>
+                  <button
+                    onClick={handleCreateLead}
+                    disabled={creatingLead}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: WA_DARK }}
+                  >
+                    {creatingLead ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+                    Créer un lead
+                  </button>
+                </div>
+              )}
+
+              {/* Leads */}
+              {clientInfo.leads.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Lead{clientInfo.leads.length > 1 ? 's' : ''}</p>
+                  <div className="flex flex-col gap-2">
+                    {clientInfo.leads.map(lead => (
+                      <a
+                        key={lead.id}
+                        href={`/dashboard/leads/${lead.id}/modifier`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-colors group"
+                      >
+                        <User className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{lead.first_name} {lead.last_name}</p>
+                          <p className="text-xs text-gray-400 truncate">
+                            {lead.events?.name || 'Sans événement'} · {lead.adults_count}ad{lead.children_count > 0 ? ` ${lead.children_count}enf` : ''}{lead.babies_count > 0 ? ` ${lead.babies_count}bb` : ''}
+                          </p>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                          lead.status === 'nouveau' ? 'bg-blue-100 text-blue-700' :
+                          lead.status === 'en_cours' ? 'bg-amber-100 text-amber-700' :
+                          lead.status === 'converti' ? 'bg-green-100 text-green-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>{lead.status}</span>
+                        <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dossiers */}
+              {clientInfo.dossiers.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Dossier{clientInfo.dossiers.length > 1 ? 's' : ''} ({clientInfo.dossiers.length})
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {clientInfo.dossiers.map(dos => (
+                      <a
+                        key={dos.id}
+                        href={`/dashboard/dossiers/${dos.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-colors group"
+                      >
+                        <FolderOpen className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {dos.primary_contact_first_name} {dos.primary_contact_last_name}
+                          </p>
+                          <p className="text-xs text-gray-400 truncate">
+                            {dos.events?.name || '—'}
+                            {dos.events?.start_date ? ` · ${new Date(dos.events.start_date).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}` : ''}
+                          </p>
+                          {dos.quoted_price && (
+                            <p className="text-xs text-gray-500">
+                              {dos.amount_paid != null ? `${dos.amount_paid.toLocaleString('fr-FR')} / ` : ''}{dos.quoted_price.toLocaleString('fr-FR')} €
+                            </p>
+                          )}
+                        </div>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                          dos.crm_status === 'confirme' ? 'bg-green-100 text-green-700' :
+                          dos.crm_status === 'en_attente' ? 'bg-amber-100 text-amber-700' :
+                          dos.crm_status === 'annule' ? 'bg-red-100 text-red-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>{dos.crm_status}</span>
+                        <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {clientInfo.isKnown && clientInfo.leads.length === 0 && clientInfo.dossiers.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">Aucun enregistrement trouvé</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── chat area ── */}
       <div className="flex-1 flex flex-col min-w-0" style={{ backgroundColor: WA_BG }}>
         {selectedPhone ? (
           <>
             {/* chat header */}
             <div className="flex items-center gap-3 px-4 h-[60px] flex-shrink-0 shadow-sm" style={{ backgroundColor: WA_DARK }}>
-              <div className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-white font-semibold text-xs select-none"
-                style={{ backgroundColor: avatarColor(selectedPhone) }}>
+              <button
+                onClick={() => setClientPanel(p => !p)}
+                className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-white font-semibold text-xs select-none hover:opacity-80 transition-opacity"
+                style={{ backgroundColor: avatarColor(selectedPhone) }}
+                title="Voir la fiche client"
+              >
                 {getInitials(selectedConv?.displayName || null, selectedPhone)}
-              </div>
-              <div className="flex-1 min-w-0">
+              </button>
+              <button
+                onClick={() => setClientPanel(p => !p)}
+                className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
+                title="Voir la fiche client"
+              >
                 <p className="text-white font-semibold text-sm truncate">
                   {selectedConv?.displayName || formatPhone(selectedPhone)}
+                  {clientInfo && !clientInfo.isKnown && !clientInfoLoading && (
+                    <span className="ml-2 text-xs font-normal opacity-70">· Nouveau contact</span>
+                  )}
+                  {clientInfo?.isKnown && (
+                    <span className="ml-2 text-xs font-normal opacity-60">
+                      · {clientInfo.dossiers.length > 0 ? `${clientInfo.dossiers.length} dossier${clientInfo.dossiers.length > 1 ? 's' : ''}` : 'Lead'}
+                    </span>
+                  )}
                 </p>
                 {selectedConv?.displayName && (
                   <p className="text-xs truncate" style={{ color: '#b2dfdb' }}>{formatPhone(selectedPhone)}</p>
                 )}
-              </div>
+              </button>
+              <button
+                onClick={() => setClientPanel(p => !p)}
+                className="text-white opacity-60 hover:opacity-100 transition-opacity flex-shrink-0"
+                title="Fiche client"
+              >
+                <User className="w-4 h-4" />
+              </button>
             </div>
 
             {/* messages */}

@@ -46,7 +46,81 @@ export interface AISuggestionResult {
   error?: string;
 }
 
+export interface ExtractedLeadInfo {
+  first_name?: string;
+  last_name?: string;
+  adults_count?: number;
+  children_count?: number;
+  babies_count?: number;
+  event_id?: string;
+  event_name_detected?: string;
+  sejour_start?: string;
+  sejour_end?: string;
+  notes?: string;
+}
+
 // ─── Core functions ────────────────────────────────────────────────────────────
+
+/**
+ * Extract lead info from a WhatsApp conversation.
+ * Called when a new lead is created from an unknown number.
+ * Detects: name, voyageurs, event, dates.
+ */
+export async function extractLeadInfoFromConversation(
+  phoneNumber: string,
+  displayName?: string | null,
+): Promise<ExtractedLeadInfo> {
+  const anthropic = getAnthropic();
+  if (!anthropic) return {};
+
+  // Load messages
+  const { data: msgs } = await supabase
+    .from('whatsapp_messages')
+    .select('direction, message_content, message_type')
+    .eq('wa_phone_number', phoneNumber)
+    .order('created_at', { ascending: true })
+    .limit(20);
+
+  if (!msgs?.length) return {};
+
+  // Load events for matching
+  const { data: events } = await supabase
+    .from('events')
+    .select('id, name')
+    .limit(50);
+
+  const eventList = (events ?? []).map((e) => `- ${e.name} (id: ${e.id})`).join('\n');
+  const convText = msgs
+    .map((m) => `${m.direction === 'inbound' ? (displayName || 'Client') : 'Agent'}: ${m.message_type !== 'text' ? `[${m.message_type}]` : m.message_content}`)
+    .join('\n');
+
+  try {
+    const response = await Promise.race([
+      anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        system: `Extrait les informations d'un client depuis une conversation WhatsApp. Retourne UNIQUEMENT du JSON valide, rien d'autre.`,
+        messages: [{
+          role: 'user',
+          content: `Conversation:\n${convText}\n\nÉvénements disponibles:\n${eventList || 'Aucun'}\n\nExtrait et retourne ce JSON (null si pas trouvé):\n{"first_name":null,"last_name":null,"adults_count":null,"children_count":null,"babies_count":null,"event_id":null,"event_name_detected":null,"sejour_start":null,"sejour_end":null,"notes":null}`,
+        }],
+      }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+    ]);
+
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : null;
+    if (!text) return {};
+
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return {};
+
+    const extracted = JSON.parse(match[0]) as ExtractedLeadInfo;
+    // Filter out nulls
+    return Object.fromEntries(Object.entries(extracted).filter(([, v]) => v !== null && v !== undefined)) as ExtractedLeadInfo;
+  } catch {
+    return {};
+  }
+}
 
 /**
  * Save an approved AI response as a few-shot example for future learning.
