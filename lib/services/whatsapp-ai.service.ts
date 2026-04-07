@@ -32,6 +32,26 @@ Règles de rédaction :
 
 Format de ta réponse : texte brut uniquement, sans guillemets ni formatage markdown.`;
 
+/**
+ * Prompt spécial pour collecter les infos d'un nouveau contact.
+ * Adapte la question au prochain champ manquant.
+ */
+function buildLeadGatheringPrompt(missingFields: string[]): string {
+  const next = missingFields[0];
+  const questionMap: Record<string, string> = {
+    name: 'Demande naturellement le prénom et le nom du client.',
+    event: 'Demande pour quel événement ou voyage il souhaite se renseigner.',
+    travelers: 'Demande combien de personnes voyagent avec lui (adultes, enfants, bébés).',
+    dates: 'Demande les dates de séjour souhaitées.',
+  };
+
+  return `Tu es l'assistant commercial de Turquoise, une agence de voyages de groupe.
+C'est un nouveau contact, tu dois collecter ses informations progressivement.
+${next ? `Prochaine information à collecter : ${questionMap[next] || 'demande plus de détails.'}` : 'Tu as déjà toutes les infos de base, remercie et propose la prochaine étape.'}
+Réponds en 1-2 phrases maximum, en français, de façon naturelle et chaleureuse.
+Texte brut uniquement, sans guillemets ni markdown.`;
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface ConversationMessage {
@@ -172,6 +192,13 @@ export async function saveApprovedExample(
 export async function generateWhatsAppSuggestion(
   phoneNumber: string,
   contactName?: string | null,
+  leadContext?: {
+    isNewContact: boolean;
+    hasName: boolean;
+    hasEvent: boolean;
+    hasTravelers: boolean;
+    hasDates: boolean;
+  },
 ): Promise<AISuggestionResult> {
   const anthropic = getAnthropic();
   if (!anthropic) {
@@ -211,15 +238,27 @@ export async function generateWhatsAppSuggestion(
     })
     .join('\n');
 
-  // Build few-shot block
-  let fewShotBlock = '';
-  if (examples?.length) {
-    const examplesText = examples
-      .map((e, i) =>
-        `--- Exemple ${i + 1} ---\nContexte:\n${e.conversation_context}\nRéponse envoyée:\n${e.good_response}`,
-      )
-      .join('\n\n');
-    fewShotBlock = `\n\nVoici des exemples de bonnes réponses déjà validées par l'équipe :\n\n${examplesText}\n\nInspire-toi de ce style et de ce ton.`;
+  // Determine system prompt — use lead-gathering if new contact
+  let systemPrompt: string;
+  if (leadContext?.isNewContact) {
+    const missing: string[] = [];
+    if (!leadContext.hasName) missing.push('name');
+    if (!leadContext.hasEvent) missing.push('event');
+    if (!leadContext.hasTravelers) missing.push('travelers');
+    if (!leadContext.hasDates) missing.push('dates');
+    systemPrompt = buildLeadGatheringPrompt(missing);
+  } else {
+    // Build few-shot block for returning clients
+    let fewShotBlock = '';
+    if (examples?.length) {
+      const examplesText = examples
+        .map((e, i) =>
+          `--- Exemple ${i + 1} ---\nContexte:\n${e.conversation_context}\nRéponse envoyée:\n${e.good_response}`,
+        )
+        .join('\n\n');
+      fewShotBlock = `\n\nVoici des exemples de bonnes réponses déjà validées par l'équipe :\n\n${examplesText}\n\nInspire-toi de ce style et de ce ton.`;
+    }
+    systemPrompt = SYSTEM_PROMPT + fewShotBlock;
   }
 
   try {
@@ -227,7 +266,7 @@ export async function generateWhatsAppSuggestion(
       anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 400,
-        system: SYSTEM_PROMPT + fewShotBlock,
+        system: systemPrompt,
         messages: [
           {
             role: 'user',

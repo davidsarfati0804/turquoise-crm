@@ -61,5 +61,5 @@ export async function POST(req: NextRequest) {
     await supabase.from('leads').update(update).eq('id', lead.id);
   }
 
-  return NextResponse.json({ ok: true, extracted, updated: update });
+  return NextResponse.json({ ok: true, extracted, updated: update, leadId: lead.id });
 }
