@@ -254,7 +254,6 @@ export async function sendWhatsAppMessage(
       const ipcMessageId = `crm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       const { error } = await supabase.from('whatsapp_send_queue').insert({
-        id: ipcMessageId.replace('crm-', ''), // use timestamp-random as hint, Supabase generates UUID
         chat_jid: targetJid,
         message_type: 'text',
         message_text: messageContent,
