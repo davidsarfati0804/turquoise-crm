@@ -10,33 +10,24 @@ export default async function EditDossierPage({ params }: { params: Promise<{ id
 
   const { data: clientFile, error } = await supabase
     .from('client_files')
-    .select('*, events (id, name), leads (id, first_name, last_name)')
+    .select('*')
     .eq('id', id)
     .maybeSingle()
 
-  if (error || !clientFile) {
-    notFound()
-  }
+  if (error || !clientFile) notFound()
 
-  // Load room types for dropdown
-  const { data: roomTypes } = await supabase
-    .from('room_types')
-    .select('id, code, name')
-    .order('name')
-
-  // Load events for event dropdown
-  const { data: events } = await supabase
-    .from('events')
-    .select('id, name, destination_label')
-    .in('status', ['upcoming', 'active', 'draft'])
-    .order('name')
+  const [roomTypesRes, eventsRes, flightsRes] = await Promise.all([
+    supabase.from('room_types').select('id, code, name').order('name'),
+    supabase.from('events').select('id, name, destination_label')
+      .in('status', ['upcoming', 'active', 'draft']).order('name'),
+    supabase.from('reference_flights').select('id, airline, flight_number, scheduled_time, flight_type')
+      .eq('is_active', true).order('flight_type').order('flight_number'),
+  ])
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
-      <Link
-        href={`/dashboard/dossiers/${clientFile.id}`}
-        className="inline-flex items-center text-turquoise-600 hover:text-turquoise-700 mb-6"
-      >
+      <Link href={`/dashboard/dossiers/${clientFile.id}`}
+        className="inline-flex items-center text-turquoise-600 hover:text-turquoise-700 mb-6">
         <ArrowLeft className="w-4 h-4 mr-1" />
         Retour au dossier
       </Link>
@@ -49,8 +40,9 @@ export default async function EditDossierPage({ params }: { params: Promise<{ id
       <div className="bg-white rounded-lg shadow-lg p-6">
         <EditDossierForm
           clientFile={clientFile}
-          roomTypes={roomTypes || []}
-          events={events || []}
+          roomTypes={roomTypesRes.data || []}
+          events={eventsRes.data || []}
+          flights={flightsRes.data || []}
         />
       </div>
     </div>

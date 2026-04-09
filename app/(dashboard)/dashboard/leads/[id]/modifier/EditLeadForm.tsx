@@ -40,6 +40,8 @@ export function EditLeadForm({ lead }: { lead: any }) {
       adults_count: parseInt(formData.get('adults_count') as string) || 1,
       children_count: parseInt(formData.get('children_count') as string) || 0,
       babies_count: parseInt(formData.get('babies_count') as string) || 0,
+      nounou_included: formData.get('nounou_included') === 'on',
+      notes: (formData.get('notes') as string) || null,
     }
 
     const supabase = createClient()
@@ -164,7 +166,7 @@ export function EditLeadForm({ lead }: { lead: any }) {
 
       <div className="border-t pt-6">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Voyageurs</h3>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4 mb-4">
           <div>
             <label htmlFor="adults_count" className="block text-sm font-medium text-gray-700 mb-1">Adultes</label>
             <input type="number" id="adults_count" name="adults_count" min="1"
@@ -187,6 +189,23 @@ export function EditLeadForm({ lead }: { lead: any }) {
             />
           </div>
         </div>
+        <label className="flex items-center gap-3 cursor-pointer select-none">
+          <input type="checkbox" name="nounou_included"
+            defaultChecked={!!lead.nounou_included}
+            className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+          <span className="text-sm font-medium text-gray-700">
+            Nounou privée incluse <span className="text-gray-400 font-normal">(enfants &lt; 4 ans)</span>
+          </span>
+        </label>
+      </div>
+
+      <div className="border-t pt-6">
+        <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+        <textarea id="notes" name="notes" rows={3}
+          defaultValue={lead.notes || ''}
+          placeholder="Informations complémentaires..."
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
+        />
       </div>
 
       <div className="flex items-center justify-end space-x-4 pt-4">

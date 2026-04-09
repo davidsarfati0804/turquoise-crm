@@ -118,7 +118,8 @@ export function ConvertToFileButton({ lead }: { lead: any }) {
         quoted_price: quotedPrice,
         balance_due: quotedPrice,
         crm_status: 'inscription_en_cours',
-        payment_status: 'pending'
+        payment_status: 'pending',
+        nounou_included: lead.nounou_included || false,
       }])
       .select()
       .maybeSingle()
