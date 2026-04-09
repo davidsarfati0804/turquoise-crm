@@ -20,6 +20,8 @@ function diffDays(start: string, end: string): number {
   return Math.max(0, Math.round(ms / 86400000))
 }
 
+interface FlightRef { id: string; airline: string; flight_number: string; scheduled_time: string; flight_type: 'aller' | 'retour' }
+
 export function LeadForm() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -27,6 +29,12 @@ export function LeadForm() {
   const [events, setEvents] = useState<any[]>([])
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [roomTypes, setRoomTypes] = useState<any[]>([])
+  const [flightsAller, setFlightsAller] = useState<FlightRef[]>([])
+  const [flightsRetour, setFlightsRetour] = useState<FlightRef[]>([])
+  const [flightIdInbound, setFlightIdInbound] = useState('')
+  const [flightIdOutbound, setFlightIdOutbound] = useState('')
+  const [flightDateInbound, setFlightDateInbound] = useState('')
+  const [flightDateOutbound, setFlightDateOutbound] = useState('')
 
   // Dates du séjour (globales, appliquées par défaut à tous les voyageurs)
   const [sejour_start, setSejourStart] = useState('')
@@ -42,17 +50,26 @@ export function LeadForm() {
   }])
 
   useEffect(() => {
+    const supabase = createClient()
     const loadEvents = async () => {
-      const supabase = createClient()
       const { data } = await supabase
         .from('events')
         .select('id, name, destination_label, start_date, arrival_date, departure_date, nights_count')
         .in('status', ['upcoming', 'active', 'draft'])
         .order('start_date', { ascending: false })
-
       setEvents(data || [])
     }
+    const loadFlights = async () => {
+      const { data } = await supabase
+        .from('reference_flights')
+        .select('id, airline, flight_number, scheduled_time, flight_type')
+        .eq('is_active', true)
+        .order('flight_number')
+      setFlightsAller((data ?? []).filter((f: FlightRef) => f.flight_type === 'aller'))
+      setFlightsRetour((data ?? []).filter((f: FlightRef) => f.flight_type === 'retour'))
+    }
     loadEvents()
+    loadFlights()
   }, [])
 
   // Quand l'événement change, charger les chambres avec prix
@@ -232,6 +249,11 @@ export function LeadForm() {
       notes: notesContent + sejourMeta
         + (needsNani && formData.get('nani_notes') ? `\n[Nani] ${formData.get('nani_notes')}` : '')
         + (formData.get('notes') as string || ''),
+      nounou_included: needsNani,
+      flight_id_inbound: flightIdInbound || null,
+      flight_id_outbound: flightIdOutbound || null,
+      flight_date_inbound: flightDateInbound || null,
+      flight_date_outbound: flightDateOutbound || null,
     }
 
     const supabase = createClient()
@@ -325,6 +347,43 @@ export function LeadForm() {
             )}
           </p>
         )}
+      </div>
+
+      {/* VOLS */}
+      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">✈️ Vols <span className="font-normal text-gray-400">(optionnel, à compléter plus tard si inconnu)</span></h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Vol aller (arrivée MRU)</label>
+            <select value={flightIdInbound} onChange={e => { setFlightIdInbound(e.target.value); if (!flightDateInbound && sejour_start) setFlightDateInbound(sejour_start) }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent bg-white">
+              <option value="">-- Inconnu pour l&apos;instant --</option>
+              {flightsAller.map(f => (
+                <option key={f.id} value={f.id}>{f.flight_number} – {f.airline} ({f.scheduled_time.slice(0,5)})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Date d&apos;arrivée</label>
+            <input type="date" value={flightDateInbound} onChange={e => setFlightDateInbound(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent bg-white" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Vol retour (départ MRU)</label>
+            <select value={flightIdOutbound} onChange={e => { setFlightIdOutbound(e.target.value); if (!flightDateOutbound && sejour_end) setFlightDateOutbound(sejour_end) }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent bg-white">
+              <option value="">-- Inconnu pour l&apos;instant --</option>
+              {flightsRetour.map(f => (
+                <option key={f.id} value={f.id}>{f.flight_number} – {f.airline} ({f.scheduled_time.slice(0,5)})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Date de retour</label>
+            <input type="date" value={flightDateOutbound} onChange={e => setFlightDateOutbound(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent bg-white" />
+          </div>
+        </div>
       </div>
 
       <div>

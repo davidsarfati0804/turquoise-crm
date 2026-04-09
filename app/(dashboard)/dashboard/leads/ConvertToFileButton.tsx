@@ -120,6 +120,10 @@ export function ConvertToFileButton({ lead }: { lead: any }) {
         crm_status: 'inscription_en_cours',
         payment_status: 'pending',
         nounou_included: lead.nounou_included || false,
+        flight_id_inbound: lead.flight_id_inbound || null,
+        flight_id_outbound: lead.flight_id_outbound || null,
+        flight_date_inbound: lead.flight_date_inbound || null,
+        flight_date_outbound: lead.flight_date_outbound || null,
       }])
       .select()
       .maybeSingle()

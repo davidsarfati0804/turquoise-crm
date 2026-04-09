@@ -4,24 +4,37 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+interface FlightRef { id: string; airline: string; flight_number: string; scheduled_time: string; flight_type: 'aller' | 'retour' }
+
 export function EditLeadForm({ lead }: { lead: any }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [events, setEvents] = useState<any[]>([])
+  const [flightsAller, setFlightsAller] = useState<FlightRef[]>([])
+  const [flightsRetour, setFlightsRetour] = useState<FlightRef[]>([])
 
   useEffect(() => {
+    const supabase = createClient()
     const loadEvents = async () => {
-      const supabase = createClient()
       const { data } = await supabase
         .from('events')
         .select('id, name, destination_label, start_date')
         .in('status', ['upcoming', 'active', 'draft'])
         .order('start_date', { ascending: false })
-
       setEvents(data || [])
     }
+    const loadFlights = async () => {
+      const { data } = await supabase
+        .from('reference_flights')
+        .select('id, airline, flight_number, scheduled_time, flight_type')
+        .eq('is_active', true)
+        .order('flight_number')
+      setFlightsAller((data ?? []).filter((f: FlightRef) => f.flight_type === 'aller'))
+      setFlightsRetour((data ?? []).filter((f: FlightRef) => f.flight_type === 'retour'))
+    }
     loadEvents()
+    loadFlights()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -42,6 +55,10 @@ export function EditLeadForm({ lead }: { lead: any }) {
       babies_count: parseInt(formData.get('babies_count') as string) || 0,
       nounou_included: formData.get('nounou_included') === 'on',
       notes: (formData.get('notes') as string) || null,
+      flight_id_inbound: (formData.get('flight_id_inbound') as string) || null,
+      flight_id_outbound: (formData.get('flight_id_outbound') as string) || null,
+      flight_date_inbound: (formData.get('flight_date_inbound') as string) || null,
+      flight_date_outbound: (formData.get('flight_date_outbound') as string) || null,
     }
 
     const supabase = createClient()
@@ -197,6 +214,43 @@ export function EditLeadForm({ lead }: { lead: any }) {
             Nounou privée incluse <span className="text-gray-400 font-normal">(enfants &lt; 4 ans)</span>
           </span>
         </label>
+      </div>
+
+      {/* VOLS */}
+      <div className="border-t pt-6">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">✈️ Vols <span className="font-normal text-gray-400">(optionnel)</span></h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Vol aller (arrivée MRU)</label>
+            <select name="flight_id_inbound" defaultValue={lead.flight_id_inbound || ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent">
+              <option value="">-- Inconnu pour l&apos;instant --</option>
+              {flightsAller.map(f => (
+                <option key={f.id} value={f.id}>{f.flight_number} – {f.airline} ({f.scheduled_time.slice(0,5)})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Date d&apos;arrivée</label>
+            <input type="date" name="flight_date_inbound" defaultValue={lead.flight_date_inbound || ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Vol retour (départ MRU)</label>
+            <select name="flight_id_outbound" defaultValue={lead.flight_id_outbound || ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent">
+              <option value="">-- Inconnu pour l&apos;instant --</option>
+              {flightsRetour.map(f => (
+                <option key={f.id} value={f.id}>{f.flight_number} – {f.airline} ({f.scheduled_time.slice(0,5)})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Date de retour</label>
+            <input type="date" name="flight_date_outbound" defaultValue={lead.flight_date_outbound || ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent" />
+          </div>
+        </div>
       </div>
 
       <div className="border-t pt-6">
