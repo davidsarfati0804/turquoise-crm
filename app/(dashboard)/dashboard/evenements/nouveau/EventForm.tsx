@@ -129,7 +129,7 @@ export function EventForm() {
 
       if (pricingError) {
         console.error('Error inserting pricing:', pricingError)
-        setError('Événement créé mais erreur lors de l\'ajout des prix')
+        setError(`Événement créé mais erreur lors de l'ajout des prix : ${pricingError.message}`)
         setLoading(false)
         return
       }

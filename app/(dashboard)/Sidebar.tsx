@@ -37,7 +37,8 @@ const navigation = [
     icon: Settings,
     subItems: [
       { name: 'Généraux', href: '/dashboard/parametres?tab=general' },
-      { name: 'Événements', href: '/dashboard/parametres?tab=evenements' }
+      { name: 'Événements', href: '/dashboard/parametres?tab=evenements' },
+      { name: '✈️ Vols', href: '/dashboard/parametrage/vols' }
     ]
   },
 ]
