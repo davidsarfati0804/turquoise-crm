@@ -7,8 +7,9 @@ import { TransfersTab } from './TransfersTab'
 import { RoomsAssignmentTab } from './RoomsAssignmentTab'
 import { NannyTab } from './NannyTab'
 import { EventDashboardTab } from './EventDashboardTab'
+import { SeatingTab } from './SeatingTab'
 
-type TabType = 'crm' | 'rooms' | 'dossiers' | 'payments' | 'transfers' | 'rooms_assign' | 'nanny' | 'dashboard'
+type TabType = 'crm' | 'rooms' | 'dossiers' | 'payments' | 'transfers' | 'rooms_assign' | 'nanny' | 'dashboard' | 'seating'
 
 export function EventTabs({ event }: { event: { id: string; [key: string]: unknown } }) {
   const [activeTab, setActiveTab] = useState<TabType>('dossiers')
@@ -16,6 +17,7 @@ export function EventTabs({ event }: { event: { id: string; [key: string]: unkno
   const tabs: { id: TabType; label: string }[] = [
     { id: 'dashboard',    label: '📊 Dashboard live' },
     { id: 'dossiers',     label: '📁 Dossiers' },
+    { id: 'seating',      label: '🪑 Tables' },
     { id: 'transfers',    label: '✈️ Transferts' },
     { id: 'rooms_assign', label: '🛏️ Chambres' },
     { id: 'nanny',        label: '👶 Nanny' },
@@ -46,6 +48,7 @@ export function EventTabs({ event }: { event: { id: string; [key: string]: unkno
       <div className="p-6">
         {activeTab === 'dashboard'    && <EventDashboardTab eventId={event.id} />}
         {activeTab === 'dossiers'     && <DossiersTab event={event} />}
+        {activeTab === 'seating'      && <SeatingTab eventId={event.id} />}
         {activeTab === 'transfers'    && <TransfersTab eventId={event.id} />}
         {activeTab === 'rooms_assign' && <RoomsAssignmentTab eventId={event.id} />}
         {activeTab === 'nanny'        && <NannyTab eventId={event.id} />}
