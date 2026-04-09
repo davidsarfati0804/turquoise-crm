@@ -22,7 +22,9 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
       *,
       events (*),
       leads (*),
-      room_types (*),
+      selected_room_type:selected_room_type_id(*),
+      flight_inbound:flight_id_inbound(id, airline, flight_number, flight_type, origin, destination, scheduled_time),
+      flight_outbound:flight_id_outbound(id, airline, flight_number, flight_type, origin, destination, scheduled_time),
       participants (*),
       payment_links (*),
       internal_notes (*)

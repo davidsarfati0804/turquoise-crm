@@ -44,6 +44,7 @@ export function EditDossierForm({ clientFile, roomTypes, events, flights }: Prop
       nounou_included:                formData.get('nounou_included') === 'on',
       notes:                          (formData.get('notes') as string) || null,
       assigned_to:                    (formData.get('assigned_to') as string) || null,
+      room_number:                    (formData.get('room_number') as string) || null,
       // Vols
       flight_id_inbound:              (formData.get('flight_id_inbound') as string) || null,
       flight_id_outbound:             (formData.get('flight_id_outbound') as string) || null,
@@ -183,6 +184,13 @@ export function EditDossierForm({ clientFile, roomTypes, events, flights }: Prop
             <input type="number" id="quoted_price" name="quoted_price" step="0.01" min="0"
               defaultValue={(clientFile.quoted_price as number) || ''}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent" />
+          </div>
+          <div>
+            <label htmlFor="room_number" className="block text-sm font-medium text-gray-700 mb-1">N° de chambre</label>
+            <input type="text" id="room_number" name="room_number"
+              defaultValue={(clientFile.room_number as string) || ''}
+              placeholder="Ex: 204"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent font-mono" />
           </div>
         </div>
       </div>
