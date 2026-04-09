@@ -300,7 +300,7 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
             <div>
               <p className="text-sm text-gray-500 mb-1">Chambre</p>
               <p className="font-medium text-gray-900">
-                {selectedRoom?.name || clientFile.room_types?.name || <span className="text-orange-500">⚠️ Non attribuée</span>}
+                {selectedRoom?.name || clientFile.selected_room_type?.name || <span className="text-orange-500">⚠️ Non attribuée</span>}
               </p>
             </div>
 

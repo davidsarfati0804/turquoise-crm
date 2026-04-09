@@ -109,7 +109,7 @@ async function createLeadFromMessage(
       first_name: firstName,
       last_name: lastName,
       source: 'whatsapp',
-      status: 'nouveau',
+      crm_status: 'nouveau',
       notes: `Initial WhatsApp message: ${messageContent.substring(0, 200)}`,
     })
     .select('id')

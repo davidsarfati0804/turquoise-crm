@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const [leadResult, dossiersResult] = await Promise.all([
     supabase
       .from('leads')
-      .select('id, first_name, last_name, phone, status, source, adults_count, children_count, babies_count, notes, created_at, converted_to_file_id, event_id, events(name)')
+      .select('id, first_name, last_name, phone, crm_status, source, adults_count, children_count, babies_count, notes, created_at, converted_to_file_id, event_id, events(name)')
       .eq('phone', phone)
       .order('created_at', { ascending: false })
       .limit(10),
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       first_name: firstName,
       last_name: lastName,
       source: 'whatsapp',
-      status: 'nouveau',
+      crm_status: 'nouveau',
       event_id: (extractedInfo?.event_id as string) || null,
       adults_count: (extractedInfo?.adults_count as number) || 1,
       children_count: (extractedInfo?.children_count as number) || 0,
@@ -99,7 +99,7 @@ export async function PATCH(req: NextRequest) {
   const { leadId, ...fields } = body;
   if (!leadId) return NextResponse.json({ error: 'leadId requis' }, { status: 400 });
 
-  const allowed = ['first_name', 'last_name', 'event_id', 'adults_count', 'children_count', 'babies_count', 'notes', 'status'];
+  const allowed = ['first_name', 'last_name', 'event_id', 'adults_count', 'children_count', 'babies_count', 'notes', 'crm_status'];
   const update: Record<string, unknown> = {};
   for (const key of allowed) {
     if (fields[key] !== undefined) update[key] = fields[key];

@@ -19,7 +19,7 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
       adults_count, children_count, babies_count,
       events (name, start_date),
       leads (first_name, last_name, phone),
-      room_types (name)
+      selected_room_type:selected_room_type_id(name)
     `)
     .order('updated_at', { ascending: false })
     .limit(200)
@@ -101,7 +101,7 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
                       {file.events?.name || '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {file.room_types?.name || '—'}
+                      {file.selected_room_type?.name || '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {file.quoted_price != null ? `${Number(file.quoted_price).toLocaleString('fr-FR')} €` : '—'}
