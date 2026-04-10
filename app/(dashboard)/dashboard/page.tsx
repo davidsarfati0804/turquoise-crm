@@ -97,7 +97,7 @@ export default async function DashboardPage() {
             <TrendingUp className="w-5 h-5" />
             <span className="text-2xl font-bold">{new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(caEstime)}€</span>
           </div>
-          <p className="text-xs font-medium">CA estimé</p>
+          <p className="text-xs font-medium">CA confirmé</p>
         </div>
       </div>
 

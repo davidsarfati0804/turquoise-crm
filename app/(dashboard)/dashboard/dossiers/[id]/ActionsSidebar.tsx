@@ -107,31 +107,23 @@ export function ActionsSidebar({ clientFile }: { clientFile: any }) {
         <hr className="border-gray-200 my-4" />
 
         {/* Autres actions */}
-        <button
-          onClick={() => alert('Fonctionnalité "Envoyer lien BRED" - À venir')}
-          disabled={loading}
-          className="w-full px-4 py-2 bg-turquoise-600 hover:bg-turquoise-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center"
-        >
-          <Send className="w-4 h-4 mr-2" />
-          Envoyer lien paiement
-        </button>
-
         <Link
           href={`/dashboard/dossiers/${clientFile.id}/modifier`}
-          className="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors flex items-center justify-center"
+          className="w-full px-4 py-2 bg-turquoise-600 hover:bg-turquoise-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center"
         >
           <Edit className="w-4 h-4 mr-2" />
           Modifier le dossier
         </Link>
 
-        <button
-          onClick={() => alert('Fonctionnalité "Générer facture" - À venir')}
-          disabled={loading}
-          className="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center"
-        >
+        <div className="w-full px-4 py-2 bg-gray-100 text-gray-400 rounded-lg font-medium flex items-center justify-center cursor-not-allowed" title="Prochainement disponible">
+          <Send className="w-4 h-4 mr-2" />
+          Lien paiement (bientôt)
+        </div>
+
+        <div className="w-full px-4 py-2 bg-gray-100 text-gray-400 rounded-lg font-medium flex items-center justify-center cursor-not-allowed" title="Prochainement disponible">
           <FileText className="w-4 h-4 mr-2" />
-          Générer facture
-        </button>
+          Facture (bientôt)
+        </div>
 
         <hr className="border-gray-200 my-4" />
 

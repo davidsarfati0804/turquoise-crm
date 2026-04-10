@@ -174,10 +174,43 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
         )}
       </div>
 
+      {/* Vols assignés */}
+      {(clientFile.flight_inbound || clientFile.flight_outbound) && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">✈️ Vols assignés</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {clientFile.flight_inbound && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-blue-600 uppercase mb-1">Aller — Arrivée MRU</p>
+                <p className="font-bold text-gray-900">{clientFile.flight_inbound.flight_number}</p>
+                <p className="text-sm text-gray-700">{clientFile.flight_inbound.airline}</p>
+                <p className="text-sm text-gray-600">{clientFile.flight_inbound.origin} → {clientFile.flight_inbound.destination}</p>
+                <p className="text-sm font-medium text-blue-700 mt-1">{clientFile.flight_inbound.scheduled_time?.slice(0, 5)}</p>
+                {clientFile.flight_date_inbound && (
+                  <p className="text-xs text-gray-500 mt-1">{new Date(clientFile.flight_date_inbound).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                )}
+              </div>
+            )}
+            {clientFile.flight_outbound && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-orange-600 uppercase mb-1">Retour — Départ MRU</p>
+                <p className="font-bold text-gray-900">{clientFile.flight_outbound.flight_number}</p>
+                <p className="text-sm text-gray-700">{clientFile.flight_outbound.airline}</p>
+                <p className="text-sm text-gray-600">{clientFile.flight_outbound.origin} → {clientFile.flight_outbound.destination}</p>
+                <p className="text-sm font-medium text-orange-700 mt-1">{clientFile.flight_outbound.scheduled_time?.slice(0, 5)}</p>
+                {clientFile.flight_date_outbound && (
+                  <p className="text-xs text-gray-500 mt-1">{new Date(clientFile.flight_date_outbound).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Séjour (dates de l'événement) */}
       {clientFile.events && (
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">✈️ Séjour</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">🏨 Séjour</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-sm text-gray-500 mb-1">Arrivée</p>
@@ -276,7 +309,7 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
             </div>
             <div>
               <label className="text-sm text-gray-500 mb-2 block">Voyageurs</label>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs text-gray-400 block">Adultes</label>
                   <input type="number" min="1" value={adultsCount} onChange={e => setAdultsCount(parseInt(e.target.value) || 1)}

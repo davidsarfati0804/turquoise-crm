@@ -25,7 +25,8 @@ export function ParticipantsSection({ clientFile }: { clientFile: any }) {
     ])
   }
 
-  const handleRemoveParticipant = (index: number) => {
+  const handleRemoveParticipant = (index: number, name: string) => {
+    if (!confirm(`Supprimer ${name || 'ce participant'} ?`)) return
     setParticipants(participants.filter((_: any, i: number) => i !== index))
   }
 
@@ -64,6 +65,17 @@ export function ParticipantsSection({ clientFile }: { clientFile: any }) {
       console.error('Error saving participants:', error)
       alert('Erreur lors de la sauvegarde')
     } else {
+      // Sync total_participants sur le dossier
+      const adults = participantsToInsert.filter((p: { participant_type: string }) => p.participant_type === 'adult').length
+      const children = participantsToInsert.filter((p: { participant_type: string }) => p.participant_type === 'child').length
+      const babies = participantsToInsert.filter((p: { participant_type: string }) => p.participant_type === 'baby').length
+      await supabase.from('client_files').update({
+        adults_count: adults || 1,
+        children_count: children,
+        babies_count: babies,
+        total_participants: participantsToInsert.length,
+      }).eq('id', clientFile.id)
+
       setEditing(false)
       router.refresh()
     }
@@ -122,7 +134,7 @@ export function ParticipantsSection({ clientFile }: { clientFile: any }) {
                   <option value="baby">👶 Bébé</option>
                 </select>
                 <button
-                  onClick={() => handleRemoveParticipant(index)}
+                  onClick={() => handleRemoveParticipant(index, `${participant.first_name} ${participant.last_name}`)}
                   className="text-red-600 hover:text-red-700"
                 >
                   <Trash2 className="w-4 h-4" />

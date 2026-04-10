@@ -4,8 +4,9 @@ import { DollarSign, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import { PAYMENT_STATUS_LABELS, CRM_STATUS_LABELS } from '@/lib/constants/statuses'
 import { STATUS_COLORS } from '@/lib/constants/colors'
 
-export default async function PaiementsPage() {
+export default async function PaiementsPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
   const supabase = await createClient()
+  const { filter } = await searchParams
 
   const { data: dossiers } = await supabase
     .from('client_files')
@@ -22,6 +23,12 @@ export default async function PaiementsPage() {
   const pending = all.filter(d => d.payment_status === 'pending')
   const partial = all.filter(d => d.payment_status === 'partial')
   const paid = all.filter(d => d.payment_status === 'paid')
+
+  // Filtre actif
+  const filtered = filter === 'pending' ? pending
+    : filter === 'partial' ? partial
+    : filter === 'paid' ? paid
+    : all
 
   const totalCA = all.reduce((sum, d) => sum + (d.quoted_price || 0), 0)
   const totalPaid = paid.reduce((sum, d) => sum + (d.quoted_price || 0), 0)
@@ -68,13 +75,41 @@ export default async function PaiementsPage() {
         </div>
       </div>
 
+      {/* Filtres */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {[
+          { label: 'Tous', value: undefined, count: all.length },
+          { label: 'En attente', value: 'pending', count: pending.length },
+          { label: 'Partiels', value: 'partial', count: partial.length },
+          { label: 'Payés', value: 'paid', count: paid.length },
+        ].map(f => (
+          <Link
+            key={f.label}
+            href={f.value ? `/dashboard/paiements?filter=${f.value}` : '/dashboard/paiements'}
+            className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              filter === f.value || (!filter && !f.value)
+                ? 'bg-turquoise-600 text-white'
+                : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {f.label}
+            <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold ${
+              filter === f.value || (!filter && !f.value) ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
+            }`}>{f.count}</span>
+          </Link>
+        ))}
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-900">Tous les dossiers avec paiements</h2>
+          <h2 className="font-semibold text-gray-900">
+            {filter === 'pending' ? 'Paiements en attente' : filter === 'paid' ? 'Dossiers payés' : filter === 'partial' ? 'Paiements partiels' : 'Tous les dossiers'}
+            <span className="ml-2 text-gray-400 font-normal text-sm">({filtered.length})</span>
+          </h2>
         </div>
-        {all.length > 0 ? (
-          <div className="overflow-x-auto">
+        {filtered.length > 0 ? (
+          <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -83,11 +118,12 @@ export default async function PaiementsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Événement</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut CRM</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paiement</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Montant</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Montant dû</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Solde</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {all.map((d: any) => (
+                {filtered.map((d: any) => (
                   <tr key={d.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link href={`/dashboard/dossiers/${d.id}`} className="text-turquoise-600 hover:text-turquoise-800 font-medium">
@@ -117,6 +153,13 @@ export default async function PaiementsPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">
                       {d.quoted_price ? fmt(d.quoted_price) : '—'}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      {d.quoted_price != null ? (
+                        <span className={((d.quoted_price || 0) - (d.amount_paid || 0)) > 0 ? 'text-orange-600' : 'text-green-600'}>
+                          {fmt(Math.max(0, (d.quoted_price || 0) - (d.amount_paid || 0)))}
+                        </span>
+                      ) : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -125,7 +168,7 @@ export default async function PaiementsPage() {
         ) : (
           <div className="text-center py-12">
             <DollarSign className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">Aucun dossier avec paiement</p>
+            <p className="text-gray-500">Aucun dossier trouvé</p>
           </div>
         )}
       </div>

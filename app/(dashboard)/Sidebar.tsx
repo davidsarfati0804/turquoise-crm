@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState } from 'react'
 import {
   LayoutDashboard,
   Calendar,
@@ -11,7 +12,9 @@ import {
   Users,
   Settings,
   FolderOpen,
-  MessageSquare
+  MessageSquare,
+  Menu,
+  X
 } from 'lucide-react'
 
 const navigation = [
@@ -43,13 +46,12 @@ const navigation = [
   },
 ]
 
-// Les 5 items principaux pour la barre mobile
+// Les 4 items principaux pour la barre mobile
 const mobileNav = [
   { name: 'CRM', href: '/dashboard/crm', icon: LayoutGrid },
   { name: 'Leads', href: '/dashboard/leads', icon: FileText },
   { name: 'Messages', href: '/dashboard/whatsapp', icon: MessageSquare },
   { name: 'Dossiers', href: '/dashboard/dossiers', icon: FolderOpen },
-  { name: 'Plus', href: '/dashboard', icon: LayoutDashboard },
 ]
 
 interface SidebarProps {
@@ -59,6 +61,7 @@ interface SidebarProps {
 
 export default function Sidebar({ user, profile }: SidebarProps) {
   const pathname = usePathname()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
     <>
@@ -127,8 +130,43 @@ export default function Sidebar({ user, profile }: SidebarProps) {
         </div>
       </div>
 
+      {/* Drawer menu "Plus" sur mobile */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileMenuOpen(false)} />
+          <div className="relative bg-white rounded-t-2xl shadow-xl p-6 pb-safe"
+            style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">🌊 Turquoise CRM</h3>
+              <button onClick={() => setMobileMenuOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {navigation.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href || pathname.startsWith(item.href.split('?')[0] + '/')
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex flex-col items-center p-3 rounded-xl transition-colors ${
+                      isActive ? 'bg-turquoise-100 text-turquoise-700' : 'bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <Icon className="w-6 h-6 mb-1" />
+                    <span className="text-xs font-medium text-center">{item.name}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Barre de navigation mobile (visible uniquement sur mobile) */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-turquoise-900 border-t border-turquoise-700 flex items-center justify-around"
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-turquoise-900 border-t border-turquoise-700 flex items-center justify-around"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {mobileNav.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href.split('?')[0] + '/')
@@ -146,6 +184,14 @@ export default function Sidebar({ user, profile }: SidebarProps) {
             </Link>
           )
         })}
+        {/* Bouton "Plus" ouvre le drawer */}
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="flex flex-col items-center py-2 px-3 min-w-0 flex-1 transition-colors text-turquoise-300"
+        >
+          <Menu className="w-5 h-5 mb-0.5" />
+          <span className="text-xs font-medium">Plus</span>
+        </button>
       </nav>
     </>
   )
