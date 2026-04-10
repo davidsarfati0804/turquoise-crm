@@ -28,7 +28,7 @@ interface LeadRecord {
   first_name: string;
   last_name: string;
   phone: string;
-  status: string;
+  crm_status: string;
   source: string;
   adults_count: number;
   children_count: number;
@@ -733,7 +733,7 @@ export function WhatsAppInbox() {
               )}
 
               {/* Progressive lead form */}
-              {clientInfo.leads.length > 0 && clientInfo.leads[0].status === 'nouveau' && (() => {
+              {clientInfo.leads.length > 0 && clientInfo.leads[0].crm_status === 'nouveau' && (() => {
                 const lead = clientInfo.leads[0];
                 const fields = [
                   { key: 'first_name', label: 'Prénom', value: lead.first_name !== 'Client' ? lead.first_name : null, dbKey: 'first_name' },
@@ -911,11 +911,11 @@ export function WhatsAppInbox() {
                           </p>
                         </div>
                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                          lead.status === 'nouveau' ? 'bg-blue-100 text-blue-700' :
-                          lead.status === 'en_cours' ? 'bg-amber-100 text-amber-700' :
-                          lead.status === 'converti' ? 'bg-green-100 text-green-700' :
+                          lead.crm_status === 'nouveau' ? 'bg-blue-100 text-blue-700' :
+                          lead.crm_status === 'en_cours' ? 'bg-amber-100 text-amber-700' :
+                          lead.crm_status === 'converti' ? 'bg-green-100 text-green-700' :
                           'bg-gray-100 text-gray-500'
-                        }`}>{lead.status}</span>
+                        }`}>{lead.crm_status}</span>
                         <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
                       </a>
                     ))}
