@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Edit, Save, X, Phone, Mail } from 'lucide-react'
+import { Edit, Save, X, Phone, Mail, Tag } from 'lucide-react'
 
 interface RoomType {
   id: string
@@ -29,10 +29,43 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
 
   // Commercial fields
   const [roomTypeId, setRoomTypeId] = useState(clientFile.selected_room_type_id || '')
-  const [quotedPrice, setQuotedPrice] = useState(clientFile.quoted_price || '')
+  const [quotedPrice, setQuotedPrice] = useState<string>(clientFile.quoted_price?.toString() || '')
+  const [cataloguePrice, setCataloguePrice] = useState<number | null>(null)
+  const [reduction, setReduction] = useState<string>('0')
   const [adultsCount, setAdultsCount] = useState(clientFile.adults_count || 1)
   const [childrenCount, setChildrenCount] = useState(clientFile.children_count || 0)
   const [babiesCount, setBabiesCount] = useState(clientFile.babies_count || 0)
+
+  // Calcul prix catalogue quand roomTypeId change
+  useEffect(() => {
+    if (!roomTypeId || !clientFile.event_id) { setCataloguePrice(null); return }
+    const fetchPrice = async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('event_room_pricing')
+        .select('price_per_night')
+        .eq('event_id', clientFile.event_id)
+        .eq('room_type_id', roomTypeId)
+        .maybeSingle()
+      const ppn = (data as any)?.price_per_night
+      const nights = clientFile.events?.nights_count || 0
+      if (ppn && nights) {
+        const base = Math.round(ppn * nights * 100) / 100
+        setCataloguePrice(base)
+        // Auto-remplir le prix facturé si vide
+        if (!quotedPrice) setQuotedPrice(base.toString())
+      } else {
+        setCataloguePrice(null)
+      }
+    }
+    fetchPrice()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomTypeId])
+
+  // Réduction calculée
+  const parsedQuoted = parseFloat(quotedPrice) || 0
+  const parsedReduction = parseFloat(reduction) || 0
+  const finalPrice = Math.max(0, parsedQuoted - parsedReduction)
 
   const saveSection = async (section: string) => {
     setSaving(true)
@@ -48,12 +81,12 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
         primary_contact_email: email || null,
       }
     } else if (section === 'commercial') {
-      const parsedPrice = quotedPrice ? parseFloat(quotedPrice) : null
+      const finalPriceToSave = parsedReduction > 0 ? finalPrice : (parseFloat(quotedPrice) || null)
       const amountPaid = clientFile.amount_paid || 0
       updateData = {
         selected_room_type_id: roomTypeId || null,
-        quoted_price: parsedPrice,
-        balance_due: parsedPrice != null ? Math.max(0, parsedPrice - amountPaid) : null,
+        quoted_price: finalPriceToSave,
+        balance_due: finalPriceToSave != null ? Math.max(0, finalPriceToSave - amountPaid) : null,
         adults_count: adultsCount,
         children_count: childrenCount,
         babies_count: babiesCount,
@@ -254,10 +287,23 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
                 <p className="font-medium text-gray-900">{clientFile.events.check_out_time?.substring(0, 5)}</p>
               </div>
             )}
-            {clientFile.events.nounou_included && (
+            {clientFile.nounou_included && (
               <div className="col-span-2">
-                <p className="text-sm text-gray-500 mb-1">Nounou</p>
-                <p className="font-medium text-green-600">✅ Incluse {clientFile.events.nounou_details ? `- ${clientFile.events.nounou_details}` : ''}</p>
+                <p className="text-sm text-gray-500 mb-1">Nounou privée</p>
+                <div className="flex flex-wrap gap-2">
+                  {clientFile.nanny_name ? (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-teal-100 text-teal-800">
+                      👶 {clientFile.nanny_name}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-orange-500">⚠️ Nanny non encore assignée</span>
+                  )}
+                  {clientFile.nanny_name_2 && (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-teal-100 text-teal-800">
+                      👶 {clientFile.nanny_name_2}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -289,24 +335,55 @@ export function EditableDossierSections({ clientFile, roomTypes }: Props) {
 
         {editingSection === 'commercial' ? (
           <div className="space-y-4">
+            <div>
+              <label className="text-sm text-gray-500 mb-1 block">Type de chambre</label>
+              <select value={roomTypeId} onChange={e => setRoomTypeId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent text-sm">
+                <option value="">-- Non défini --</option>
+                {roomTypes.map(rt => (
+                  <option key={rt.id} value={rt.id}>{rt.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Prix catalogue calculé automatiquement */}
+            {cataloguePrice != null && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                <p className="text-blue-600 font-medium">
+                  Prix catalogue : <span className="font-bold">{cataloguePrice.toLocaleString('fr-FR')} €</span>
+                  <span className="text-blue-400 font-normal ml-1">
+                    ({clientFile.events?.nights_count} nuits)
+                  </span>
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-gray-500 mb-1 block">Type de chambre</label>
-                <select value={roomTypeId} onChange={e => setRoomTypeId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent text-sm">
-                  <option value="">-- Non défini --</option>
-                  {roomTypes.map(rt => (
-                    <option key={rt.id} value={rt.id}>{rt.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 mb-1 block">Prix total (€)</label>
+                <label className="text-sm text-gray-500 mb-1 block">Prix de base (€)</label>
                 <input type="number" step="0.01" min="0" value={quotedPrice}
                   onChange={e => setQuotedPrice(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent text-sm" />
               </div>
+              <div>
+                <label className="text-sm text-gray-500 mb-1 flex items-center gap-1">
+                  <Tag className="w-3 h-3" /> Réduction (€)
+                </label>
+                <input type="number" step="0.01" min="0" value={reduction}
+                  onChange={e => setReduction(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-3 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent text-sm" />
+              </div>
             </div>
+
+            {parsedReduction > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm">
+                <p className="text-orange-700 font-medium">
+                  Prix final après réduction : <span className="font-bold text-orange-800">{finalPrice.toLocaleString('fr-FR')} €</span>
+                  <span className="ml-2 text-orange-500">(-{parsedReduction.toLocaleString('fr-FR')} €)</span>
+                </p>
+              </div>
+            )}
             <div>
               <label className="text-sm text-gray-500 mb-2 block">Voyageurs</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

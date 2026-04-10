@@ -265,7 +265,7 @@ export function SeatingTab({ eventId }: { eventId: string }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dragActive, setDragActive] = useState<ClientFileRow | null>(null)
-  const [dateStr] = useState(today)
+  const [dateStr, setDateStr] = useState(today)
   const [copyingYesterday, setCopyingYesterday] = useState(false)
 
   const sensors = useSensors(
@@ -479,20 +479,32 @@ export function SeatingTab({ eventId }: { eventId: string }) {
             {files.length === 0 && (
               <p className="text-xs text-gray-400 text-center py-8">Aucun dossier</p>
             )}
-            {files.map(f => {
-              const isPlaced = assignedFileIds.has(f.id)
-              const isArr = f.flight_date_inbound === dateStr
-              const isDep = f.flight_date_outbound === dateStr
-              return (
-                <DraggableFamily
-                  key={f.id}
-                  file={f}
-                  isArrival={isArr}
-                  isDeparture={isDep}
-                  isPlaced={isPlaced}
-                />
-              )
-            })}
+            {files
+              .filter(f => {
+                // Afficher si pas de dates de vol, ou si présent ce jour (arrivée <= dateStr <= départ)
+                const arr = f.flight_date_inbound
+                const dep = f.flight_date_outbound
+                if (!arr && !dep) return true
+                if (arr && dep) return arr <= dateStr && dateStr <= dep
+                if (arr) return arr <= dateStr
+                if (dep) return dateStr <= dep
+                return true
+              })
+              .map(f => {
+                const isPlaced = assignedFileIds.has(f.id)
+                const isArr = f.flight_date_inbound === dateStr
+                const isDep = f.flight_date_outbound === dateStr
+                return (
+                  <DraggableFamily
+                    key={f.id}
+                    file={f}
+                    isArrival={isArr}
+                    isDeparture={isDep}
+                    isPlaced={isPlaced}
+                  />
+                )
+              })
+            }
           </div>
         </div>
 
@@ -500,6 +512,17 @@ export function SeatingTab({ eventId }: { eventId: string }) {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Sub-tabs + actions */}
           <div className="flex items-center gap-3 mb-4 flex-wrap">
+            {/* Sélecteur de date */}
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
+              <span className="text-xs font-semibold text-gray-500">📅</span>
+              <input
+                type="date"
+                value={dateStr}
+                onChange={e => setDateStr(e.target.value || today())}
+                className="text-sm font-medium text-gray-700 bg-transparent border-none outline-none cursor-pointer"
+              />
+            </div>
+
             <div className="flex border border-gray-200 rounded-lg overflow-hidden">
               {(['jour', 'chabbat'] as const).map(t => (
                 <button key={t} onClick={() => setActiveTab(t)}
