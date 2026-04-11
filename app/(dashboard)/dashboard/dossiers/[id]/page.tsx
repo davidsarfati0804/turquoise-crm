@@ -173,7 +173,7 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
         </div>
 
         {/* Colonne droite - WhatsApp + Actions (40%) */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6 lg:sticky lg:top-6 lg:self-start">
           {/* Sidebar d'actions */}
           <ActionsSidebar clientFile={clientFile} />
 
