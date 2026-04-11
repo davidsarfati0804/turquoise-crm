@@ -20,22 +20,56 @@ interface NanoclawInboundPayload {
   is_from_me: boolean;
 }
 
-async function findCustomer(phoneNumber: string) {
-  const { data: lead } = await supabase
-    .from('leads')
-    .select('id')
-    .eq('phone', phoneNumber)
-    .limit(1)
-    .maybeSingle();
-  if (lead) return { leadId: lead.id as string, clientFileId: null as string | null };
+/** Normalise un numéro vers +33XXXXXXXXX (ou autre indicatif).
+ *  Gère : 0612345678 / 33612345678 / +33612345678 / +33 6 12 34 56 78 */
+function normalizePhone(raw: string): string {
+  // Déjà au format lid:
+  if (raw.startsWith('lid:')) return raw;
+  // Supprimer tout sauf chiffres et +
+  let digits = raw.replace(/[\s.\-()]/g, '');
+  if (digits.startsWith('+')) return digits;
+  // 0XXXXXXXXX → +33XXXXXXXXX (France)
+  if (digits.startsWith('0') && digits.length === 10) return '+33' + digits.slice(1);
+  // 33XXXXXXXXX → +33XXXXXXXXX
+  if (digits.startsWith('33') && digits.length === 11) return '+' + digits;
+  return '+' + digits;
+}
 
-  const { data: file } = await supabase
-    .from('client_files')
-    .select('id')
-    .eq('primary_contact_phone', phoneNumber)
-    .limit(1)
-    .maybeSingle();
-  if (file) return { leadId: null as string | null, clientFileId: file.id as string };
+/** Retourne toutes les variantes possibles d'un numéro pour la recherche */
+function phoneVariants(phone: string): string[] {
+  const norm = normalizePhone(phone);
+  const variants = new Set<string>([phone, norm]);
+  // Sans le +
+  if (norm.startsWith('+')) variants.add(norm.slice(1));
+  // Format 0X si France
+  if (norm.startsWith('+33') && norm.length === 12) variants.add('0' + norm.slice(3));
+  return Array.from(variants);
+}
+
+async function findCustomer(phoneNumber: string) {
+  const variants = phoneVariants(phoneNumber);
+
+  // Chercher dans leads (essayer chaque variante)
+  for (const v of variants) {
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('phone', v)
+      .limit(1)
+      .maybeSingle();
+    if (lead) return { leadId: lead.id as string, clientFileId: null as string | null };
+  }
+
+  // Chercher dans client_files
+  for (const v of variants) {
+    const { data: file } = await supabase
+      .from('client_files')
+      .select('id')
+      .eq('primary_contact_phone', v)
+      .limit(1)
+      .maybeSingle();
+    if (file) return { leadId: null as string | null, clientFileId: file.id as string };
+  }
 
   return { leadId: null, clientFileId: null };
 }
