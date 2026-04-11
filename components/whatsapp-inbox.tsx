@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import {
   Send, Loader2, MessageSquare, Trash2, Check, CheckCheck,
@@ -172,6 +173,7 @@ const WA_BUBBLE = '#DCF8C6';
 // ─── main component ───────────────────────────────────────────────────────────
 
 export function WhatsAppInbox() {
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [filtered, setFiltered] = useState<Conversation[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -616,15 +618,16 @@ export function WhatsAppInbox() {
       if (suggestion.type === 'dossier') {
         await supabase.from('client_files').update({ primary_contact_phone: selectedPhone }).eq('id', suggestion.id);
         await supabase.from('whatsapp_messages').update({ client_file_id: suggestion.id }).eq('wa_phone_number', selectedPhone).is('client_file_id', null);
+        router.push(`/dashboard/dossiers/${suggestion.id}`);
       } else {
         await supabase.from('leads').update({ phone: selectedPhone }).eq('id', suggestion.id);
         await supabase.from('whatsapp_messages').update({ lead_id: suggestion.id }).eq('wa_phone_number', selectedPhone).is('lead_id', null);
+        await loadClientInfo(selectedPhone);
       }
-      await loadClientInfo(selectedPhone);
     } finally {
       setLinkingId(null);
     }
-  }, [selectedPhone, linkingId, supabase, loadClientInfo]);
+  }, [selectedPhone, linkingId, supabase, loadClientInfo, router]);
 
   const selectedConv = conversations.find(c => c.phone === selectedPhone);
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0);
