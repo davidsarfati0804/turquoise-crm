@@ -131,9 +131,7 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
           <ActionsSidebar clientFile={clientFile} />
 
           {/* Conversation WhatsApp */}
-          <div className="h-96">
-            <WhatsAppConversation clientFile={clientFile} />
-          </div>
+          <WhatsAppConversation clientFile={clientFile} />
         </div>
       </div>
     </div>

@@ -168,7 +168,7 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow flex flex-col" style={{ height: '480px' }}>
+    <div className="bg-white rounded-lg shadow flex flex-col" style={{ height: '560px', minHeight: '400px' }}>
       {/* Header */}
       <div className="border-b border-gray-200 px-4 py-3 bg-gray-50 rounded-t-lg flex items-center justify-between">
         <div className="flex items-center gap-2">
