@@ -855,7 +855,7 @@ export function WhatsAppInbox() {
                   { key: 'first_name', label: 'Prénom', value: lead.first_name !== 'Client' ? lead.first_name : null, dbKey: 'first_name' },
                   { key: 'last_name', label: 'Nom', value: lead.last_name !== 'WhatsApp' ? lead.last_name : null, dbKey: 'last_name' },
                   { key: 'phone', label: 'Téléphone', value: selectedPhone.startsWith('lid:') ? null : formatPhone(selectedPhone), dbKey: null, readOnly: true },
-                  { key: 'event', label: 'Événement', value: lead.events?.name || null, dbKey: 'event_id', readOnly: true },
+                  { key: 'event', label: 'Événement', value: lead.events?.name || null, dbKey: 'event_id', readOnly: false },
                   { key: 'travelers', label: 'Voyageurs', value: lead.adults_count > 1 || lead.children_count > 0 || lead.babies_count > 0
                     ? `${lead.adults_count} ad.${lead.children_count ? ` ${lead.children_count} enf.` : ''}${lead.babies_count ? ` ${lead.babies_count} bb.` : ''}`
                     : null, dbKey: null, readOnly: true },
@@ -985,7 +985,23 @@ export function WhatsAppInbox() {
                                         </button>
                                       </>
                                     )}
-                                    {!hasPending && !readOnly && (
+                                    {!hasPending && !readOnly && key === 'event' && value && (
+                                      <button
+                                        onClick={async () => {
+                                          await fetch('/api/whatsapp/client-info', {
+                                            method: 'PATCH',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ leadId: lead.id, event_id: null }),
+                                          });
+                                          await loadClientInfo(selectedPhone!);
+                                        }}
+                                        className="w-5 h-5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center"
+                                        title="Effacer l'événement"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                    {!hasPending && !readOnly && key !== 'event' && (
                                       <button
                                         onClick={() => { setEditingField(key); setEditValue(value || ''); }}
                                         className="w-5 h-5 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 flex items-center justify-center"
