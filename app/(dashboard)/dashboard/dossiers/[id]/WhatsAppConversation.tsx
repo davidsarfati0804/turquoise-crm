@@ -6,6 +6,7 @@ import { Send, Loader2, MessageSquare, CheckCheck, Check } from 'lucide-react'
 
 interface Message {
   id: string
+  wa_message_id?: string | null
   wa_phone_number: string
   message_content: string
   direction: 'inbound' | 'outbound'
@@ -86,18 +87,26 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
     // Realtime — écouter sur client_file_id ET wa_phone_number
     const channels: ReturnType<typeof supabase.channel>[] = []
 
+    const addMessage = (payload: { new: Record<string, unknown> }) => {
+      const msg = payload.new as unknown as Message
+      setMessages(prev => {
+        if (prev.some(m => m.id === msg.id)) return prev
+        if (msg.wa_message_id && prev.some(m => m.wa_message_id === msg.wa_message_id)) return prev
+        // Message sortant : retire l'optimiste avec le même contenu
+        if (msg.direction === 'outbound') {
+          return [...prev.filter(m => !(m.id.startsWith('opt_') && m.message_content === msg.message_content)), msg]
+        }
+        return [...prev, msg]
+      })
+    }
+
     if (clientFile?.id) {
       channels.push(
         supabase.channel(`wa_dossier_${clientFile.id}`)
           .on('postgres_changes', {
             event: 'INSERT', schema: 'public', table: 'whatsapp_messages',
             filter: `client_file_id=eq.${clientFile.id}`,
-          }, (payload) => {
-            setMessages(prev => {
-              if (prev.some(m => m.id === payload.new.id)) return prev
-              return [...prev, payload.new as Message]
-            })
-          })
+          }, addMessage)
           .subscribe()
       )
     }
@@ -108,12 +117,7 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
           .on('postgres_changes', {
             event: 'INSERT', schema: 'public', table: 'whatsapp_messages',
             filter: `wa_phone_number=eq.${normalizedPhone}`,
-          }, (payload) => {
-            setMessages(prev => {
-              if (prev.some(m => m.id === payload.new.id)) return prev
-              return [...prev, payload.new as Message]
-            })
-          })
+          }, addMessage)
           .subscribe()
       )
     }
