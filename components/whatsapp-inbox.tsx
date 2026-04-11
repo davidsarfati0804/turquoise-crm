@@ -344,8 +344,13 @@ export function WhatsAppInbox() {
       }, (payload) => {
         const msg = payload.new as WhatsAppMessage;
         setMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
           if (msg.wa_message_id && prev.some(m => m.wa_message_id === msg.wa_message_id)) return prev;
-          return [...prev.filter(m => !m.id.startsWith('opt_')), msg];
+          // Si c'est un message sortant, retire les optimistes avec le même contenu
+          if (msg.direction === 'outbound') {
+            return [...prev.filter(m => !(m.id.startsWith('opt_') && m.message_content === msg.message_content)), msg];
+          }
+          return [...prev, msg];
         });
         saveLastSeen(selectedPhone);
         // Progressive extraction: re-analyze on each new inbound message

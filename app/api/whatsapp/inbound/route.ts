@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     phoneNumber = rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`;
   }
 
-  // Check if message already exists (idempotency)
+  // Check if message already exists (idempotency by wa_message_id)
   const { data: existing } = await supabase
     .from('whatsapp_messages')
     .select('id')
@@ -115,6 +115,25 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (existing) {
     return NextResponse.json({ ok: true, skipped: 'duplicate' });
+  }
+
+  // is_from_me=true means the message was sent from the CRM → check for duplicate
+  // by content+phone+direction within the last 2 minutes (avoids double insert
+  // when whatsapp.service.ts already stored it and Nanoclaw fires is_from_me callback)
+  if (is_from_me) {
+    const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { data: crmDup } = await supabase
+      .from('whatsapp_messages')
+      .select('id')
+      .eq('wa_phone_number', phoneNumber)
+      .eq('message_content', content)
+      .eq('direction', 'outbound')
+      .gte('created_at', twoMinAgo)
+      .limit(1)
+      .maybeSingle();
+    if (crmDup) {
+      return NextResponse.json({ ok: true, skipped: 'crm-duplicate' });
+    }
   }
 
   const { leadId, clientFileId } = await findCustomer(phoneNumber);

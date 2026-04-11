@@ -10,22 +10,39 @@ const supabase = createClient(
  * GET /api/whatsapp/client-info?phone=+336...
  * Returns lead + all client_files (dossiers) for a given phone number.
  */
+function phoneVariants(phone: string): string[] {
+  if (phone.startsWith('lid:')) return [phone];
+  const digits = phone.replace(/[\s.\-()]/g, '');
+  const norm = digits.startsWith('+') ? digits
+    : digits.startsWith('0') && digits.length === 10 ? '+33' + digits.slice(1)
+    : digits.startsWith('33') && digits.length === 11 ? '+' + digits
+    : '+' + digits;
+  const variants = new Set([phone, norm]);
+  if (norm.startsWith('+')) variants.add(norm.slice(1));
+  if (norm.startsWith('+33') && norm.length === 12) variants.add('0' + norm.slice(3));
+  return Array.from(variants);
+}
+
 export async function GET(req: NextRequest) {
   const phone = req.nextUrl.searchParams.get('phone');
   if (!phone) return NextResponse.json({ error: 'phone requis' }, { status: 400 });
+
+  const variants = phoneVariants(phone);
+  const orPhone = variants.map(v => `phone.eq.${v}`).join(',');
+  const orCfPhone = variants.map(v => `primary_contact_phone.eq.${v}`).join(',');
 
   const [leadResult, dossiersResult] = await Promise.all([
     supabase
       .from('leads')
       .select('id, first_name, last_name, phone, crm_status, source, adults_count, children_count, babies_count, notes, created_at, converted_to_file_id, event_id, events(name)')
-      .eq('phone', phone)
+      .or(orPhone)
       .order('created_at', { ascending: false })
       .limit(10),
 
     supabase
       .from('client_files')
       .select('id, file_reference, primary_contact_first_name, primary_contact_last_name, crm_status, payment_status, quoted_price, amount_paid, created_at, event_id, events(name, start_date)')
-      .eq('primary_contact_phone', phone)
+      .or(orCfPhone)
       .order('created_at', { ascending: false })
       .limit(20),
   ]);
