@@ -54,10 +54,19 @@ interface DossierRecord {
   events: { name: string; start_date: string } | null;
 }
 
+interface NameSuggestion {
+  type: 'lead' | 'dossier';
+  id: string;
+  label: string;
+  subLabel: string;
+  score: number;
+}
+
 interface ClientInfo {
   leads: LeadRecord[];
   dossiers: DossierRecord[];
   isKnown: boolean;
+  nameSuggestions?: NameSuggestion[];
 }
 
 interface Conversation {
@@ -192,6 +201,7 @@ export function WhatsAppInbox() {
   const [editingPhone, setEditingPhone] = useState(false);
   const [editPhoneValue, setEditPhoneValue] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
 
   const selectedPhoneRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -510,7 +520,9 @@ export function WhatsAppInbox() {
     setClientInfoLoading(true);
     setClientInfo(null);
     try {
-      const res = await fetch('/api/whatsapp/client-info?phone=' + encodeURIComponent(phone));
+      const conv = conversations.find(c => c.phone === phone);
+      const dn = conv?.displayName ? `&displayName=${encodeURIComponent(conv.displayName)}` : '';
+      const res = await fetch('/api/whatsapp/client-info?phone=' + encodeURIComponent(phone) + dn);
       const data = await res.json() as ClientInfo;
       setClientInfo(data);
     } catch {
@@ -595,6 +607,24 @@ export function WhatsAppInbox() {
       setSavingPhone(false);
     }
   }, [selectedPhone, editPhoneValue, savingPhone, supabase, loadClientInfo]);
+
+  /** Lie le numéro WhatsApp à un lead ou dossier existant trouvé par nom */
+  const handleLinkSuggestion = useCallback(async (suggestion: NameSuggestion) => {
+    if (!selectedPhone || linkingId) return;
+    setLinkingId(suggestion.id);
+    try {
+      if (suggestion.type === 'dossier') {
+        await supabase.from('client_files').update({ primary_contact_phone: selectedPhone }).eq('id', suggestion.id);
+        await supabase.from('whatsapp_messages').update({ client_file_id: suggestion.id }).eq('wa_phone_number', selectedPhone).is('client_file_id', null);
+      } else {
+        await supabase.from('leads').update({ phone: selectedPhone }).eq('id', suggestion.id);
+        await supabase.from('whatsapp_messages').update({ lead_id: suggestion.id }).eq('wa_phone_number', selectedPhone).is('lead_id', null);
+      }
+      await loadClientInfo(selectedPhone);
+    } finally {
+      setLinkingId(null);
+    }
+  }, [selectedPhone, linkingId, supabase, loadClientInfo]);
 
   const selectedConv = conversations.find(c => c.phone === selectedPhone);
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0);
@@ -767,6 +797,36 @@ export function WhatsAppInbox() {
                   )}
                 </div>
               </div>
+
+              {/* Suggestions par nom */}
+              {!clientInfo.isKnown && (clientInfo.nameSuggestions ?? []).length > 0 && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <User className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                    <span className="text-sm font-medium text-blue-800">Rapprochement possible</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">Ce contact ressemble à :</p>
+                  <div className="flex flex-col gap-2">
+                    {(clientInfo.nameSuggestions ?? []).map(s => (
+                      <div key={s.id} className="flex items-center gap-2 bg-white rounded-lg border border-blue-100 px-2.5 py-2">
+                        {s.type === 'dossier' ? <FolderOpen className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> : <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-900 truncate">{s.label}</p>
+                          <p className="text-[10px] text-gray-400 truncate">{s.subLabel}</p>
+                        </div>
+                        <button
+                          onClick={() => handleLinkSuggestion(s)}
+                          disabled={linkingId === s.id}
+                          className="flex-shrink-0 text-xs font-semibold px-2 py-1 rounded-md text-white transition-colors disabled:opacity-50"
+                          style={{ backgroundColor: WA_DARK }}
+                        >
+                          {linkingId === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Lier'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Nouveau contact */}
               {!clientInfo.isKnown && (

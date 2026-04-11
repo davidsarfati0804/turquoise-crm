@@ -23,9 +23,18 @@ function phoneVariants(phone: string): string[] {
   return Array.from(variants);
 }
 
+/** Extrait les mots significatifs d'un nom WhatsApp (>= 3 lettres) */
+function nameTokens(displayName: string): string[] {
+  return displayName
+    .split(/[\s\-_.,]+/)
+    .map(w => w.trim())
+    .filter(w => w.length >= 3);
+}
+
 export async function GET(req: NextRequest) {
   const phone = req.nextUrl.searchParams.get('phone');
   if (!phone) return NextResponse.json({ error: 'phone requis' }, { status: 400 });
+  const displayName = req.nextUrl.searchParams.get('displayName') || '';
 
   const variants = phoneVariants(phone);
   const orPhone = variants.map(v => `phone.eq.${v}`).join(',');
@@ -47,10 +56,84 @@ export async function GET(req: NextRequest) {
       .limit(20),
   ]);
 
+  const isKnown = (leadResult.data?.length ?? 0) > 0 || (dossiersResult.data?.length ?? 0) > 0;
+
+  // Si aucun match par téléphone et qu'on a un nom WhatsApp → chercher par similarité de nom
+  let nameSuggestions: {
+    type: 'lead' | 'dossier';
+    id: string;
+    label: string;
+    subLabel: string;
+    score: number;
+  }[] = [];
+
+  if (!isKnown && displayName && !phone.startsWith('lid:')) {
+    const tokens = nameTokens(displayName);
+    if (tokens.length > 0) {
+      // Chercher dans leads
+      const leadOrName = tokens.map(t => `first_name.ilike.%${t}%,last_name.ilike.%${t}%`).join(',');
+      const cfOrName = tokens.map(t =>
+        `primary_contact_first_name.ilike.%${t}%,primary_contact_last_name.ilike.%${t}%`
+      ).join(',');
+
+      const [sugLeads, sugDossiers] = await Promise.all([
+        supabase
+          .from('leads')
+          .select('id, first_name, last_name, phone, crm_status, events(name)')
+          .or(leadOrName)
+          .is('converted_to_file_id', null)
+          .limit(5),
+        supabase
+          .from('client_files')
+          .select('id, file_reference, primary_contact_first_name, primary_contact_last_name, crm_status, events(name, start_date)')
+          .or(cfOrName)
+          .limit(5),
+      ]);
+
+      const nameLower = displayName.toLowerCase();
+
+      for (const l of sugLeads.data ?? []) {
+        const fullName = `${l.first_name} ${l.last_name}`.toLowerCase();
+        const matchedTokens = tokens.filter(t =>
+          fullName.includes(t.toLowerCase())
+        ).length;
+        if (matchedTokens >= 1) {
+          nameSuggestions.push({
+            type: 'lead',
+            id: l.id,
+            label: `${l.first_name} ${l.last_name}`,
+            subLabel: (l.events as any)?.name || `Lead · ${l.crm_status}`,
+            score: matchedTokens + (fullName === nameLower ? 10 : 0),
+          });
+        }
+      }
+
+      for (const d of sugDossiers.data ?? []) {
+        const fullName = `${d.primary_contact_first_name} ${d.primary_contact_last_name}`.toLowerCase();
+        const matchedTokens = tokens.filter(t =>
+          fullName.includes(t.toLowerCase())
+        ).length;
+        if (matchedTokens >= 1) {
+          nameSuggestions.push({
+            type: 'dossier',
+            id: d.id,
+            label: `${d.primary_contact_first_name} ${d.primary_contact_last_name}`,
+            subLabel: `${d.file_reference} · ${(d.events as any)?.name || d.crm_status}`,
+            score: matchedTokens + (fullName === nameLower ? 10 : 0),
+          });
+        }
+      }
+
+      nameSuggestions.sort((a, b) => b.score - a.score);
+      nameSuggestions = nameSuggestions.slice(0, 3);
+    }
+  }
+
   return NextResponse.json({
     leads: leadResult.data ?? [],
     dossiers: dossiersResult.data ?? [],
-    isKnown: (leadResult.data?.length ?? 0) > 0 || (dossiersResult.data?.length ?? 0) > 0,
+    isKnown,
+    nameSuggestions,
   });
 }
 
