@@ -189,6 +189,9 @@ export function WhatsAppInbox() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [validatedFields, setValidatedFields] = useState<Set<string>>(new Set());
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [editPhoneValue, setEditPhoneValue] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
 
   const selectedPhoneRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -568,6 +571,26 @@ export function WhatsAppInbox() {
     }
   }, [selectedPhone, creatingLead, conversations, loadClientInfo]);
 
+  const handleSavePhone = useCallback(async () => {
+    if (!selectedPhone || !editPhoneValue.trim() || savingPhone) return;
+    const newPhone = editPhoneValue.trim().startsWith('+') ? editPhoneValue.trim() : '+' + editPhoneValue.trim().replace(/^0/, '33');
+    setSavingPhone(true);
+    try {
+      // 1. Mettre à jour tous les messages avec l'ancien numéro
+      await supabase.from('whatsapp_messages').update({ wa_phone_number: newPhone }).eq('wa_phone_number', selectedPhone);
+      // 2. Relancer le SQL de rattachement leads/dossiers
+      try { await supabase.rpc('link_whatsapp_phone_to_crm', { p_phone: newPhone }); } catch { /* RPC optionnelle */ }
+      // 3. Mettre à jour la conversation dans l'état local
+      setConversations(prev => prev.map(c => c.phone === selectedPhone ? { ...c, phone: newPhone } : c));
+      setSelectedPhone(newPhone);
+      setEditingPhone(false);
+      // 4. Recharger la fiche client avec le nouveau numéro
+      await loadClientInfo(newPhone);
+    } finally {
+      setSavingPhone(false);
+    }
+  }, [selectedPhone, editPhoneValue, savingPhone, supabase, loadClientInfo]);
+
   const selectedConv = conversations.find(c => c.phone === selectedPhone);
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0);
 
@@ -704,11 +727,39 @@ export function WhatsAppInbox() {
                         ? `${clientInfo.leads[0].first_name} ${clientInfo.leads[0].last_name}`
                         : 'Nouveau contact')}
                   </p>
-                  <p className="text-xs text-gray-500">
-                    {selectedPhone.startsWith('lid:')
-                      ? 'Identifiant interne WhatsApp'
-                      : formatPhone(selectedPhone)}
-                  </p>
+                  {editingPhone ? (
+                    <div className="flex items-center gap-1 mt-1">
+                      <input
+                        autoFocus
+                        value={editPhoneValue}
+                        onChange={e => setEditPhoneValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleSavePhone(); if (e.key === 'Escape') setEditingPhone(false); }}
+                        placeholder="+33612345678"
+                        className="text-xs border border-teal-400 rounded px-2 py-0.5 w-36 outline-none focus:ring-1 focus:ring-teal-500"
+                      />
+                      <button onClick={handleSavePhone} disabled={savingPhone} className="text-teal-600 hover:text-teal-800 disabled:opacity-40">
+                        {savingPhone ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      </button>
+                      <button onClick={() => setEditingPhone(false)} className="text-gray-400 hover:text-gray-600">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 group">
+                      <p className="text-xs text-gray-500">
+                        {selectedPhone.startsWith('lid:')
+                          ? <span className="text-amber-500 font-medium">LID — numéro inconnu</span>
+                          : formatPhone(selectedPhone)}
+                      </p>
+                      <button
+                        onClick={() => { setEditPhoneValue(selectedPhone.startsWith('lid:') ? '' : selectedPhone); setEditingPhone(true); }}
+                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-teal-600 transition-opacity"
+                        title="Modifier le numéro"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
