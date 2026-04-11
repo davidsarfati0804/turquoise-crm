@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   const update: Record<string, unknown> = {};
   if (extracted.first_name && extracted.first_name !== 'Inconnu') update.first_name = extracted.first_name;
   if (extracted.last_name && extracted.last_name !== 'WhatsApp') update.last_name = extracted.last_name;
-  if (extracted.event_id) update.event_id = extracted.event_id;
+  // event_id n'est PAS appliqué automatiquement — l'agent doit valider manuellement
   if (extracted.adults_count != null) update.adults_count = extracted.adults_count;
   if (extracted.children_count != null) update.children_count = extracted.children_count;
   if (extracted.babies_count != null) update.babies_count = extracted.babies_count;

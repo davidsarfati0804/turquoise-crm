@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Plus, MessageSquare, Phone, Mail, Calendar, Edit, AlertTriangle } from 'lucide-react'
 import { ConvertToFileButton } from './ConvertToFileButton'
+import { DeleteLeadButton } from './DeleteLeadButton'
 import { SOURCE_LABELS } from '@/lib/constants/statuses'
 
 export default async function LeadsPage() {
@@ -179,6 +180,7 @@ export default async function LeadsPage() {
                           <Edit className="w-4 h-4" />
                         </Link>
                         <ConvertToFileButton lead={lead} />
+                        <DeleteLeadButton leadId={lead.id} />
                       </div>
                     </td>
                   </tr>

@@ -758,7 +758,7 @@ export function WhatsAppInbox() {
                       </p>
                       <button
                         onClick={() => { setEditPhoneValue(selectedPhone.startsWith('lid:') ? '' : selectedPhone); setEditingPhone(true); }}
-                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-teal-600 transition-opacity"
+                        className="text-gray-400 hover:text-teal-600 transition-colors"
                         title="Modifier le numéro"
                       >
                         <Pencil className="w-3 h-3" />
