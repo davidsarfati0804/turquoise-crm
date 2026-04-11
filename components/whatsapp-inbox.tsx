@@ -617,11 +617,12 @@ export function WhatsAppInbox() {
     try {
       if (suggestion.type === 'dossier') {
         await supabase.from('client_files').update({ primary_contact_phone: selectedPhone }).eq('id', suggestion.id);
-        await supabase.from('whatsapp_messages').update({ client_file_id: suggestion.id }).eq('wa_phone_number', selectedPhone).is('client_file_id', null);
+        // Mettre à jour TOUS les messages du numéro (pas seulement ceux sans client_file_id)
+        await supabase.from('whatsapp_messages').update({ client_file_id: suggestion.id }).eq('wa_phone_number', selectedPhone);
         router.push(`/dashboard/dossiers/${suggestion.id}`);
       } else {
         await supabase.from('leads').update({ phone: selectedPhone }).eq('id', suggestion.id);
-        await supabase.from('whatsapp_messages').update({ lead_id: suggestion.id }).eq('wa_phone_number', selectedPhone).is('lead_id', null);
+        await supabase.from('whatsapp_messages').update({ lead_id: suggestion.id }).eq('wa_phone_number', selectedPhone);
         await loadClientInfo(selectedPhone);
       }
     } finally {

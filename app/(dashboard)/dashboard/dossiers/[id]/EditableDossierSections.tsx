@@ -43,6 +43,8 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
   const [flightDateOutbound, setFlightDateOutbound] = useState(clientFile.flight_date_outbound || '')
 
   // — Séjour (champs dossier) —
+  const [sejourStartDate, setSejourStartDate] = useState(clientFile.sejour_start_date || '')
+  const [sejourEndDate, setSejourEndDate] = useState(clientFile.sejour_end_date || '')
   const [roomNumber, setRoomNumber] = useState(clientFile.room_number || '')
   const [nannouIncluded, setNannouIncluded] = useState(clientFile.nounou_included || false)
   const [nannyName, setNannyName] = useState(clientFile.nanny_name || '')
@@ -114,6 +116,8 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
       }
     } else if (section === 'sejour') {
       updateData = {
+        sejour_start_date: sejourStartDate || null,
+        sejour_end_date: sejourEndDate || null,
         room_number: roomNumber || null,
         nounou_included: nannouIncluded,
         nanny_name: nannyName || null,
@@ -368,6 +372,18 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
             <div className="space-y-4 border-t border-gray-100 pt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <label className="text-sm text-gray-500 mb-1 block">Arrivée (dossier)</label>
+                  <input type="date" value={sejourStartDate} onChange={e => setSejourStartDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 text-sm" />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-500 mb-1 block">Départ (dossier)</label>
+                  <input type="date" value={sejourEndDate} onChange={e => setSejourEndDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <label className="text-sm text-gray-500 mb-1 block">N° de chambre</label>
                   <input type="text" value={roomNumber} onChange={e => setRoomNumber(e.target.value)}
                     placeholder="Ex: 204"
@@ -406,6 +422,22 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
             </div>
           ) : (
             <div className="border-t border-gray-100 pt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+              {(clientFile.sejour_start_date || clientFile.sejour_end_date) && (
+                <>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Arrivée (dossier)</p>
+                    <p className="font-medium text-gray-900">
+                      {clientFile.sejour_start_date ? new Date(clientFile.sejour_start_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Départ (dossier)</p>
+                    <p className="font-medium text-gray-900">
+                      {clientFile.sejour_end_date ? new Date(clientFile.sejour_end_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
+                    </p>
+                  </div>
+                </>
+              )}
               <div>
                 <p className="text-sm text-gray-500 mb-1">N° chambre</p>
                 <p className="font-medium text-gray-900">{clientFile.room_number || <span className="text-gray-400">—</span>}</p>
