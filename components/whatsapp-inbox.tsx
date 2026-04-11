@@ -201,6 +201,9 @@ export function WhatsAppInbox() {
   const [editValue, setEditValue] = useState('');
   const [validatedFields, setValidatedFields] = useState<Set<string>>(new Set());
   const [editingPhone, setEditingPhone] = useState(false);
+  const [linkSearch, setLinkSearch] = useState('');
+  const [linkSearchResults, setLinkSearchResults] = useState<NameSuggestion[]>([]);
+  const [linkSearching, setLinkSearching] = useState(false);
   const [editPhoneValue, setEditPhoneValue] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
@@ -630,6 +633,40 @@ export function WhatsAppInbox() {
     }
   }, [selectedPhone, linkingId, supabase, loadClientInfo, router]);
 
+  const handleLinkSearch = useCallback(async (q: string) => {
+    setLinkSearch(q);
+    if (q.trim().length < 2) { setLinkSearchResults([]); return; }
+    setLinkSearching(true);
+    try {
+      const term = q.trim();
+      const orLeads = `first_name.ilike.%${term}%,last_name.ilike.%${term}%,phone.ilike.%${term}%`;
+      const orDossiers = `primary_contact_first_name.ilike.%${term}%,primary_contact_last_name.ilike.%${term}%,file_reference.ilike.%${term}%`;
+      const [{ data: leads }, { data: dossiers }] = await Promise.all([
+        supabase.from('leads').select('id, first_name, last_name, crm_status, events(name)').or(orLeads).limit(5),
+        supabase.from('client_files').select('id, file_reference, primary_contact_first_name, primary_contact_last_name, crm_status, events(name, start_date)').or(orDossiers).limit(5),
+      ]);
+      const results: NameSuggestion[] = [
+        ...(dossiers ?? []).map(d => ({
+          type: 'dossier' as const,
+          id: d.id,
+          label: `${d.primary_contact_first_name} ${d.primary_contact_last_name}`,
+          subLabel: `${d.file_reference} · ${(d.events as any)?.name || d.crm_status}`,
+          score: 0,
+        })),
+        ...(leads ?? []).map(l => ({
+          type: 'lead' as const,
+          id: l.id,
+          label: `${l.first_name} ${l.last_name}`,
+          subLabel: `Lead · ${(l.events as any)?.name || l.crm_status}`,
+          score: 0,
+        })),
+      ];
+      setLinkSearchResults(results);
+    } finally {
+      setLinkSearching(false);
+    }
+  }, [supabase]);
+
   const selectedConv = conversations.find(c => c.phone === selectedPhone);
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0);
 
@@ -800,6 +837,52 @@ export function WhatsAppInbox() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Recherche manuelle pour lier */}
+              <div className="rounded-xl border border-gray-200 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <span className="text-xs font-semibold text-gray-600">Rechercher un dossier / lead</span>
+                </div>
+                <div className="relative">
+                  <input
+                    value={linkSearch}
+                    onChange={e => handleLinkSearch(e.target.value)}
+                    placeholder="Nom, prénom, référence..."
+                    className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 pr-8 outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-400"
+                  />
+                  {linkSearching && <Loader2 className="w-3 h-3 animate-spin absolute right-2.5 top-2.5 text-gray-400" />}
+                  {!linkSearching && linkSearch && (
+                    <button onClick={() => { setLinkSearch(''); setLinkSearchResults([]); }} className="absolute right-2.5 top-2.5 text-gray-300 hover:text-gray-500">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                {linkSearchResults.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {linkSearchResults.map(s => (
+                      <div key={s.id} className="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-100 px-2.5 py-2">
+                        {s.type === 'dossier' ? <FolderOpen className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> : <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-900 truncate">{s.label}</p>
+                          <p className="text-[10px] text-gray-400 truncate">{s.subLabel}</p>
+                        </div>
+                        <button
+                          onClick={() => { handleLinkSuggestion(s); setLinkSearch(''); setLinkSearchResults([]); }}
+                          disabled={linkingId === s.id}
+                          className="flex-shrink-0 text-xs font-semibold px-2 py-1 rounded-md text-white transition-colors disabled:opacity-50"
+                          style={{ backgroundColor: WA_DARK }}
+                        >
+                          {linkingId === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Lier'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {linkSearch.length >= 2 && !linkSearching && linkSearchResults.length === 0 && (
+                  <p className="text-[10px] text-gray-400 mt-2 text-center">Aucun résultat</p>
+                )}
               </div>
 
               {/* Suggestions par nom */}
