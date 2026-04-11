@@ -241,7 +241,7 @@ export function LeadForm() {
       email: (formData.get('email') as string) || null,
       event_id: selectedEvent?.id || null,
       source: formData.get('source') as string,
-      status: 'nouveau',
+      crm_status: 'nouveau',
       adults_count: adultsCount,
       children_count: childrenCount,
       babies_count: babiesCount,
