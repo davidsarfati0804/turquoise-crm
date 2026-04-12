@@ -22,6 +22,7 @@ interface WhatsAppMessage {
   direction: 'inbound' | 'outbound';
   delivery_status: string;
   created_at: string;
+  metadata?: { media_url?: string; [key: string]: unknown };
 }
 
 interface LeadRecord {
@@ -1347,14 +1348,31 @@ export function WhatsAppInbox() {
                   )}
                   <div className={'flex mb-1 ' + (msg.direction === 'outbound' ? 'justify-end' : 'justify-start')}>
                     <div
-                      className={'max-w-[65%] px-3 py-2 shadow-sm text-sm ' + (msg.id.startsWith('opt_') ? 'opacity-60' : '')}
+                      className={'max-w-[65%] shadow-sm text-sm ' + (msg.id.startsWith('opt_') ? 'opacity-60' : '')}
                       style={{
                         backgroundColor: msg.direction === 'outbound' ? WA_BUBBLE : '#ffffff',
                         borderRadius: msg.direction === 'outbound' ? '8px 8px 2px 8px' : '8px 8px 8px 2px',
                       }}
                     >
-                      <p className="text-gray-900 break-words whitespace-pre-wrap leading-relaxed">{msg.message_content}</p>
-                      <div className={'flex items-center gap-1 mt-0.5 ' + (msg.direction === 'outbound' ? 'justify-end' : 'justify-start')}>
+                      {msg.message_type === 'document' ? (
+                        <a
+                          href={msg.metadata?.media_url || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 px-3 py-2.5 hover:opacity-80 transition-opacity"
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-red-500 flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-gray-900 font-medium text-xs break-all leading-tight">{msg.message_content}</p>
+                            <p className="text-gray-400 text-[10px] mt-0.5">PDF · Appuyer pour ouvrir</p>
+                          </div>
+                        </a>
+                      ) : (
+                        <p className="px-3 py-2 text-gray-900 break-words whitespace-pre-wrap leading-relaxed">{msg.message_content}</p>
+                      )}
+                      <div className={'flex items-center gap-1 px-3 pb-1.5 ' + (msg.direction === 'outbound' ? 'justify-end' : 'justify-start')}>
                         <span className="text-[10px] text-gray-400">{formatMsgTime(msg.created_at)}</span>
                         {msg.direction === 'outbound' && <DeliveryIcon status={msg.delivery_status} />}
                       </div>

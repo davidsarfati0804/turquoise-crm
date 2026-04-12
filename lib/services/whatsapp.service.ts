@@ -424,7 +424,7 @@ export async function sendWhatsAppMedia(
       .insert({
         wa_message_id: `nanoclaw-ipc-${ipcMessageId}`,
         wa_phone_number: toPhoneNumber,
-        message_content: caption || `[${mediaType}] ${mediaUrl}`,
+        message_content: filename || caption || `[${mediaType}]`,
         message_type: mediaType,
         direction: 'outbound',
         delivery_status: 'queued',

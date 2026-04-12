@@ -57,8 +57,10 @@ export async function POST(
       return NextResponse.json({ error: 'Numéro de téléphone introuvable sur ce dossier' }, { status: 400 })
     }
 
-    // Construire le nom de fichier : BI-Prénom Nom-Événement.pdf
+    // Construire le nom de fichier affiché : BI-Prénom Nom-Événement.pdf
     const filename = sanitizeFilename(`BI-${firstName} ${lastName}-${eventName}`) + '.pdf'
+    // Path Storage sans espaces (espaces → underscore) pour une URL propre téléchargeable
+    const storageFilename = filename.replace(/\s+/g, '_')
 
     // Générer le PDF via Google Docs
     const balises = prepareBalisesForGoogleDoc(biData)
@@ -66,7 +68,7 @@ export async function POST(
 
     // Uploader dans Supabase Storage (bucket public bi-documents)
     // Le bucket doit être PUBLIC pour que NanoClaw reçoive une URL propre sans token JWT
-    const storagePath = `${id}/${filename}`
+    const storagePath = `${id}/${storageFilename}`
 
     // Créer le bucket public s'il n'existe pas
     await serviceSupabase.storage.createBucket('bi-documents', { public: true }).catch(() => {})
