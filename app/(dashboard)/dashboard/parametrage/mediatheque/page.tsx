@@ -61,13 +61,7 @@ export default function MediathequePage() {
         .upload(path, file, { contentType: file.type, upsert: false })
 
       if (uploadError) {
-        // Si le bucket n'existe pas encore, on crée via l'API puis on réessaie
-        if (uploadError.message?.includes('not found') || uploadError.message?.includes('bucket')) {
-          await fetch('/api/whatsapp/media-library') // crée le bucket côté serveur
-          await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false })
-        } else {
-          setError(`Erreur : ${uploadError.message}`)
-        }
+        setError(`Erreur upload : ${uploadError.message}`)
       }
     }
 
