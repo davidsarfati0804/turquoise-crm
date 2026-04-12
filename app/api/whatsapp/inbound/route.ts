@@ -56,7 +56,7 @@ function phoneVariants(phone: string): string[] {
 async function findCustomer(phoneNumber: string) {
   const variants = phoneVariants(phoneNumber);
 
-  // Chercher dans leads (essayer chaque variante)
+  // Chercher dans leads par téléphone (toutes variantes)
   for (const v of variants) {
     const { data: lead } = await supabase
       .from('leads')
@@ -67,7 +67,7 @@ async function findCustomer(phoneNumber: string) {
     if (lead) return { leadId: lead.id as string, clientFileId: null as string | null };
   }
 
-  // Chercher dans client_files
+  // Chercher dans client_files par téléphone (toutes variantes)
   for (const v of variants) {
     const { data: file } = await supabase
       .from('client_files')
@@ -76,6 +76,27 @@ async function findCustomer(phoneNumber: string) {
       .limit(1)
       .maybeSingle();
     if (file) return { leadId: null as string | null, clientFileId: file.id as string };
+  }
+
+  // ── Recherche par whatsapp_lid (LID permanent) ────────────────────────────
+  // Quand le LID a été associé manuellement à un dossier/lead, on le retrouve
+  // même si les messages ont été migrés vers le vrai numéro.
+  if (phoneNumber.startsWith('lid:')) {
+    const { data: fileByLid } = await supabase
+      .from('client_files')
+      .select('id')
+      .eq('whatsapp_lid', phoneNumber)
+      .limit(1)
+      .maybeSingle();
+    if (fileByLid) return { leadId: null as string | null, clientFileId: fileByLid.id as string };
+
+    const { data: leadByLid } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('whatsapp_lid', phoneNumber)
+      .limit(1)
+      .maybeSingle();
+    if (leadByLid) return { leadId: leadByLid.id as string, clientFileId: null as string | null };
   }
 
   return { leadId: null, clientFileId: null };
@@ -182,21 +203,37 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // When a LID arrives and the entity already has real-phone messages,
-  // store this LID message under the real phone to keep one conversation.
+  // When a LID arrives and the entity already has a known real phone → route under it
   if (phoneNumber.startsWith('lid:') && (clientFileId || leadId)) {
-    const entityFilter = clientFileId
-      ? supabase.from('whatsapp_messages').select('wa_phone_number').eq('client_file_id', clientFileId)
-      : supabase.from('whatsapp_messages').select('wa_phone_number').eq('lead_id', leadId!);
+    // 1. Check primary_contact_phone / leads.phone on the entity itself
+    if (clientFileId) {
+      const { data: cf } = await supabase
+        .from('client_files').select('primary_contact_phone').eq('id', clientFileId).maybeSingle();
+      const realPhone = (cf as any)?.primary_contact_phone;
+      if (realPhone && !realPhone.startsWith('lid:')) {
+        phoneNumber = realPhone;
+      }
+    } else if (leadId) {
+      const { data: ld } = await supabase
+        .from('leads').select('phone').eq('id', leadId!).maybeSingle();
+      const realPhone = (ld as any)?.phone;
+      if (realPhone && !realPhone.startsWith('lid:')) {
+        phoneNumber = realPhone;
+      }
+    }
 
-    const { data: realPhoneRow } = await entityFilter
-      .not('wa_phone_number', 'like', 'lid:%')
-      .limit(1)
-      .maybeSingle();
-
-    if (realPhoneRow) {
-      // Re-route this LID message to the real phone conversation
-      phoneNumber = realPhoneRow.wa_phone_number as string;
+    // 2. Fallback : chercher un message existant sous un vrai numéro pour cette entité
+    if (phoneNumber.startsWith('lid:')) {
+      const entityFilter = clientFileId
+        ? supabase.from('whatsapp_messages').select('wa_phone_number').eq('client_file_id', clientFileId)
+        : supabase.from('whatsapp_messages').select('wa_phone_number').eq('lead_id', leadId!);
+      const { data: realPhoneRow } = await entityFilter
+        .not('wa_phone_number', 'like', 'lid:%')
+        .limit(1)
+        .maybeSingle();
+      if (realPhoneRow) {
+        phoneNumber = realPhoneRow.wa_phone_number as string;
+      }
     }
   }
 

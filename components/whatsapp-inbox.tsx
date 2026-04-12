@@ -634,17 +634,46 @@ export function WhatsAppInbox() {
   const handleSavePhone = useCallback(async () => {
     if (!selectedPhone || !editPhoneValue.trim() || savingPhone) return;
     const newPhone = editPhoneValue.trim().startsWith('+') ? editPhoneValue.trim() : '+' + editPhoneValue.trim().replace(/^0/, '33');
+    const oldPhone = selectedPhone;
     setSavingPhone(true);
     try {
-      // 1. Mettre à jour tous les messages avec l'ancien numéro
-      await supabase.from('whatsapp_messages').update({ wa_phone_number: newPhone }).eq('wa_phone_number', selectedPhone);
-      // 2. Relancer le SQL de rattachement leads/dossiers
+      // 1. Migrer tous les messages de l'ancien numéro vers le nouveau
+      await supabase.from('whatsapp_messages').update({ wa_phone_number: newPhone }).eq('wa_phone_number', oldPhone);
+
+      // 2. Si l'ancien numéro était un LID → le stocker définitivement sur le dossier/lead lié
+      //    afin que les futurs messages entrants depuis ce LID retrouvent toujours le bon dossier
+      if (oldPhone.startsWith('lid:')) {
+        await supabase.from('client_files')
+          .update({ whatsapp_lid: oldPhone, primary_contact_phone: newPhone })
+          .eq('primary_contact_phone', oldPhone);
+        await supabase.from('client_files')
+          .update({ whatsapp_lid: oldPhone })
+          .is('whatsapp_lid', null)
+          .in('id', (
+            await supabase.from('whatsapp_messages').select('client_file_id').eq('wa_phone_number', newPhone).not('client_file_id', 'is', null)
+          ).data?.map((r: { client_file_id: string }) => r.client_file_id) ?? []);
+
+        await supabase.from('leads')
+          .update({ whatsapp_lid: oldPhone, phone: newPhone })
+          .eq('phone', oldPhone);
+      }
+
+      // 3. Mettre à jour primary_contact_phone sur les dossiers qui avaient le LID
+      //    et mettre à jour le téléphone des leads
+      if (!oldPhone.startsWith('lid:')) {
+        await supabase.from('client_files').update({ primary_contact_phone: newPhone }).eq('primary_contact_phone', oldPhone);
+        await supabase.from('leads').update({ phone: newPhone }).eq('phone', oldPhone);
+      }
+
+      // 4. RPC optionnelle de rattachement
       try { await supabase.rpc('link_whatsapp_phone_to_crm', { p_phone: newPhone }); } catch { /* RPC optionnelle */ }
-      // 3. Mettre à jour la conversation dans l'état local
-      setConversations(prev => prev.map(c => c.phone === selectedPhone ? { ...c, phone: newPhone } : c));
+
+      // 5. Mettre à jour la conversation dans l'état local
+      setConversations(prev => prev.map(c => c.phone === oldPhone ? { ...c, phone: newPhone } : c));
       setSelectedPhone(newPhone);
       setEditingPhone(false);
-      // 4. Recharger la fiche client avec le nouveau numéro
+
+      // 6. Recharger la fiche client avec le nouveau numéro
       await loadClientInfo(newPhone);
     } finally {
       setSavingPhone(false);
@@ -655,14 +684,32 @@ export function WhatsAppInbox() {
   const handleLinkSuggestion = useCallback(async (suggestion: NameSuggestion) => {
     if (!selectedPhone || linkingId) return;
     setLinkingId(suggestion.id);
+    const isLid = selectedPhone.startsWith('lid:');
     try {
       if (suggestion.type === 'dossier') {
-        await supabase.from('client_files').update({ primary_contact_phone: selectedPhone }).eq('id', suggestion.id);
-        // Mettre à jour TOUS les messages du numéro (pas seulement ceux sans client_file_id)
+        // Si c'est un LID : stocker le LID pour les futurs messages entrants
+        // mais ne pas écraser le vrai numéro s'il existe déjà
+        if (isLid) {
+          await supabase.from('client_files')
+            .update({ whatsapp_lid: selectedPhone })
+            .eq('id', suggestion.id);
+        } else {
+          await supabase.from('client_files')
+            .update({ primary_contact_phone: selectedPhone })
+            .eq('id', suggestion.id);
+        }
         await supabase.from('whatsapp_messages').update({ client_file_id: suggestion.id }).eq('wa_phone_number', selectedPhone);
         router.push(`/dashboard/dossiers/${suggestion.id}`);
       } else {
-        await supabase.from('leads').update({ phone: selectedPhone }).eq('id', suggestion.id);
+        if (isLid) {
+          await supabase.from('leads')
+            .update({ whatsapp_lid: selectedPhone })
+            .eq('id', suggestion.id);
+        } else {
+          await supabase.from('leads')
+            .update({ phone: selectedPhone })
+            .eq('id', suggestion.id);
+        }
         await supabase.from('whatsapp_messages').update({ lead_id: suggestion.id }).eq('wa_phone_number', selectedPhone);
         await loadClientInfo(selectedPhone);
       }
