@@ -86,6 +86,47 @@ export async function POST(req: NextRequest) {
     content = content.replace(/{{liste_chambres}}/g, '• [Ajoute les chambres dans l\'événement]');
   }
 
+  // Résoudre {{composition}} — ex: "2 adultes" ou "2 adultes et 1 enfant"
+  const adults = (cf as any)?.adults_count ?? 2;
+  const children = (cf as any)?.children_count ?? 0;
+  const babies = (cf as any)?.babies_count ?? 0;
+  const compParts = [`${adults} adulte${adults > 1 ? 's' : ''}`];
+  if (children > 0) compParts.push(`${children} enfant${children > 1 ? 's' : ''}`);
+  if (babies > 0) compParts.push(`${babies} bébé${babies > 1 ? 's' : ''}`);
+  content = content.replace(/{{composition}}/g, compParts.join(' et '));
+
+  // Résoudre {{mois_sejour}} — ex: "Février 2026"
+  const sejourDate = event?.arrival_date ?? (cf as any)?.sejour_start_date ?? null;
+  if (sejourDate) {
+    const mois = new Date(sejourDate).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    content = content.replace(/{{mois_sejour}}/g, mois.charAt(0).toUpperCase() + mois.slice(1));
+  } else {
+    content = content.replace(/{{mois_sejour}}/g, '[mois à préciser]');
+  }
+
+  // Résoudre {{prix_nuit}} — prix de la chambre sélectionnée du dossier
+  const selectedPricing = pricing.find((p: any) => p.room_types?.code === (cf as any)?.selected_room_type?.code) ?? pricing[0];
+  content = content.replace(/{{prix_nuit}}/g, selectedPricing?.price_per_night ? `${selectedPricing.price_per_night}€` : '[prix à définir]');
+
+  // Résoudre {{type_chambre}} — nom de la chambre sélectionnée
+  const selectedRoom = selectedPricing?.room_types;
+  content = content.replace(/{{type_chambre}}/g, selectedRoom?.name || '[chambre à définir]');
+
+  // Résoudre {{options_chambres}} — les autres chambres comme options
+  if (pricing.length > 1) {
+    const options = pricing.slice(1).map((p: any) => {
+      const room = p.room_types;
+      const name = room?.name || room?.code || 'Option';
+      const diff = selectedPricing?.price_per_night && p.price_per_night
+        ? `+${p.price_per_night - selectedPricing.price_per_night}€/nuit`
+        : p.price_per_night ? `${p.price_per_night}€/nuit` : '';
+      return `Option ${name} : ${diff}`;
+    });
+    content = content.replace(/{{options_chambres}}/g, options.join('\n'));
+  } else {
+    content = content.replace(/{{options_chambres}}/g, '');
+  }
+
   // Résoudre {{nom_agent}} — depuis le profil utilisateur
   content = content.replace(/{{nom_agent}}/g, 'Aurélia');
 

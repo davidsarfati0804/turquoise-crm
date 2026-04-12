@@ -16,7 +16,12 @@ const VARIABLES = [
   { key: '{{date_debut}}', desc: 'Date d\'arrivée' },
   { key: '{{date_fin}}', desc: 'Date de départ' },
   { key: '{{date_ceremonie}}', desc: 'Date de cérémonie' },
-  { key: '{{liste_chambres}}', desc: 'Liste des chambres avec prix' },
+  { key: '{{mois_sejour}}', desc: 'Mois du séjour (ex: Février 2026)' },
+  { key: '{{composition}}', desc: 'Composition (ex: 2 adultes et 1 enfant)' },
+  { key: '{{type_chambre}}', desc: 'Chambre sélectionnée du dossier' },
+  { key: '{{prix_nuit}}', desc: 'Prix/nuit de la chambre principale' },
+  { key: '{{liste_chambres}}', desc: 'Liste complète des chambres avec prix' },
+  { key: '{{options_chambres}}', desc: 'Options d\'upgrades avec supplément' },
   { key: '{{nom_agent}}', desc: 'Nom de l\'agent (Aurélia)' },
 ]
 
