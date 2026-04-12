@@ -64,8 +64,13 @@ export async function POST(
     const balises = prepareBalisesForGoogleDoc(biData)
     const { pdfBuffer } = await generateBIFromGoogleDoc(balises, filename.replace('.pdf', ''))
 
-    // Uploader dans Supabase Storage (bucket bi-documents)
+    // Uploader dans Supabase Storage (bucket public bi-documents)
+    // Le bucket doit être PUBLIC pour que NanoClaw reçoive une URL propre sans token JWT
     const storagePath = `${id}/${filename}`
+
+    // Créer le bucket public s'il n'existe pas
+    await serviceSupabase.storage.createBucket('bi-documents', { public: true }).catch(() => {})
+
     const { error: uploadError } = await serviceSupabase.storage
       .from('bi-documents')
       .upload(storagePath, new Uint8Array(pdfBuffer), {
@@ -74,35 +79,23 @@ export async function POST(
       })
 
     if (uploadError) {
-      // Bucket probablement inexistant — essayer de le créer
-      await serviceSupabase.storage.createBucket('bi-documents', { public: false })
-      const { error: retryError } = await serviceSupabase.storage
-        .from('bi-documents')
-        .upload(storagePath, new Uint8Array(pdfBuffer), {
-          contentType: 'application/pdf',
-          upsert: true,
-        })
-      if (retryError) {
-        return NextResponse.json({ error: `Erreur upload PDF: ${retryError.message}` }, { status: 500 })
-      }
+      return NextResponse.json({ error: `Erreur upload PDF: ${uploadError.message}` }, { status: 500 })
     }
 
-    // Créer une URL signée valable 7 jours (NanoClaw doit pouvoir la télécharger)
-    const { data: signedData, error: signError } = await serviceSupabase.storage
+    // URL publique propre (sans token) — NanoClaw peut la télécharger directement
+    const { data: publicData } = serviceSupabase.storage
       .from('bi-documents')
-      .createSignedUrl(storagePath, 7 * 24 * 60 * 60)
+      .getPublicUrl(storagePath)
 
-    if (signError || !signedData?.signedUrl) {
-      return NextResponse.json({ error: `Erreur URL signée: ${signError?.message}` }, { status: 500 })
-    }
+    const mediaUrl = publicData.publicUrl
 
     // Envoyer via WhatsApp (queued via NanoClaw IPC)
     const clientFileId = (bi as any).client_files?.id
     const result = await sendWhatsAppMedia(
       phone,
-      signedData.signedUrl,
+      mediaUrl,
       'document',
-      `📋 ${filename.replace('.pdf', '')}`,
+      filename.replace('.pdf', ''),
       undefined,
       clientFileId,
       filename,
