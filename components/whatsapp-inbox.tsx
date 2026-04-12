@@ -204,6 +204,12 @@ export function WhatsAppInbox() {
   const [linkSearch, setLinkSearch] = useState('');
   const [linkSearchResults, setLinkSearchResults] = useState<NameSuggestion[]>([]);
   const [linkSearching, setLinkSearching] = useState(false);
+  const [showMediaLib, setShowMediaLib] = useState(false);
+  const [mediaFiles, setMediaFiles] = useState<{ name: string; path: string; url: string; type: string }[]>([]);
+  const [mediaFolder, setMediaFolder] = useState('');
+  const [mediaFolders, setMediaFolders] = useState<string[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [sendingMedia, setSendingMedia] = useState<string | null>(null);
   const [editPhoneValue, setEditPhoneValue] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
@@ -632,6 +638,44 @@ export function WhatsAppInbox() {
       setLinkingId(null);
     }
   }, [selectedPhone, linkingId, supabase, loadClientInfo, router]);
+
+  const loadMediaLibrary = useCallback(async (folder = '') => {
+    setMediaLoading(true);
+    setMediaFolder(folder);
+    try {
+      const res = await fetch(`/api/whatsapp/media-library?folder=${encodeURIComponent(folder)}`);
+      const data = await res.json();
+      setMediaFiles(data.files ?? []);
+      if (!folder) setMediaFolders(data.folders ?? []);
+    } finally {
+      setMediaLoading(false);
+    }
+  }, []);
+
+  const handleSendFromLibrary = useCallback(async (file: { url: string; type: string; name: string }) => {
+    if (!selectedPhone || sendingMedia) return;
+    setSendingMedia(file.url);
+    const mediaType = file.type === 'video' ? 'video' : file.type === 'document' ? 'document' : 'image';
+    const optId = 'opt_' + Date.now();
+    setMessages(prev => [...prev, {
+      id: optId, wa_phone_number: selectedPhone,
+      message_content: file.name, message_type: mediaType,
+      direction: 'outbound', delivery_status: 'queued',
+      created_at: new Date().toISOString(), wa_display_name: null,
+    }]);
+    try {
+      await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: selectedPhone, message: file.name, mediaUrl: file.url, mediaType }),
+      });
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== optId));
+    } finally {
+      setSendingMedia(null);
+      setShowMediaLib(false);
+    }
+  }, [selectedPhone, sendingMedia]);
 
   const handleLinkSearch = useCallback(async (q: string) => {
     setLinkSearch(q);
@@ -1410,6 +1454,74 @@ export function WhatsAppInbox() {
                   </button>
                 </div>
               )}
+              {/* Médiathèque panel */}
+              {showMediaLib && (
+                <div className="flex-shrink-0 border-t border-gray-200 bg-white">
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+                    <div className="flex items-center gap-2">
+                      {mediaFolder && (
+                        <button onClick={() => loadMediaLibrary('')} className="text-gray-400 hover:text-gray-600 text-xs">← Retour</button>
+                      )}
+                      <span className="text-xs font-semibold text-gray-600">{mediaFolder || 'Médiathèque'}</span>
+                    </div>
+                    <button onClick={() => setShowMediaLib(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                  </div>
+                  <div className="p-3 max-h-52 overflow-y-auto">
+                    {mediaLoading ? (
+                      <div className="flex items-center justify-center h-20"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                    ) : (
+                      <>
+                        {/* Sous-dossiers */}
+                        {!mediaFolder && mediaFolders.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {mediaFolders.map(f => (
+                              <button key={f} onClick={() => loadMediaLibrary(f)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors">
+                                📁 {f}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {/* Fichiers */}
+                        {mediaFiles.length > 0 ? (
+                          <div className="grid grid-cols-4 gap-2">
+                            {mediaFiles.map(f => (
+                              <button key={f.path} onClick={() => handleSendFromLibrary(f)}
+                                disabled={sendingMedia === f.url}
+                                className="relative group rounded-lg overflow-hidden border border-gray-200 hover:border-teal-400 transition-colors aspect-square bg-gray-50 disabled:opacity-50">
+                                {f.type === 'video' ? (
+                                  <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                                    <Video className="w-6 h-6 text-white" />
+                                    <span className="absolute bottom-1 left-1 right-1 text-[9px] text-white truncate bg-black/50 px-1 rounded">{f.name}</span>
+                                  </div>
+                                ) : f.type === 'document' ? (
+                                  <div className="w-full h-full flex items-center justify-center flex-col gap-1">
+                                    <FileText className="w-6 h-6 text-gray-400" />
+                                    <span className="text-[9px] text-gray-500 truncate px-1 w-full text-center">{f.name}</span>
+                                  </div>
+                                ) : (
+                                  <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
+                                )}
+                                {sendingMedia === f.url && (
+                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                                  </div>
+                                )}
+                                <div className="absolute inset-0 bg-teal-600/0 group-hover:bg-teal-600/10 transition-colors" />
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400 text-center py-4">
+                            {mediaFolder ? 'Dossier vide' : 'Médiathèque vide — ajoute des fichiers dans Réglages → Médiathèque'}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-end gap-2">
                 <input type="file" ref={fileInputRef} className="hidden"
                   accept="image/*,video/*,.pdf,.doc,.docx"
@@ -1421,6 +1533,14 @@ export function WhatsAppInbox() {
                   className="w-10 h-10 rounded-full bg-white hover:bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0 transition-colors disabled:opacity-40 shadow-sm"
                 >
                   {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                </button>
+                <button
+                  onClick={() => { if (!showMediaLib) loadMediaLibrary(''); setShowMediaLib(p => !p); }}
+                  disabled={sending || uploading}
+                  title="Médiathèque"
+                  className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors shadow-sm ${showMediaLib ? 'bg-teal-100 text-teal-700' : 'bg-white hover:bg-gray-100 text-gray-500'}`}
+                >
+                  <ImageIcon className="w-5 h-5" />
                 </button>
                 <textarea
                   value={replyText}

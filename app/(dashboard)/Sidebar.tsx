@@ -42,6 +42,7 @@ const navigation = [
       { name: 'Généraux', href: '/dashboard/parametres?tab=general' },
       { name: 'Événements', href: '/dashboard/parametres?tab=evenements' },
       { name: '✈️ Vols', href: '/dashboard/parametrage/vols' },
+      { name: '🖼️ Médiathèque', href: '/dashboard/parametrage/mediatheque' },
       { name: '🧠 IA WhatsApp', href: '/dashboard/parametrage/ia-training' }
     ]
   },
