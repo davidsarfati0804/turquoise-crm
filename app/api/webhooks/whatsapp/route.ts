@@ -63,29 +63,43 @@ interface WhatsAppWebhookPayload {
  * Search for existing lead or client file by phone number
  */
 async function findExistingCustomer(phoneNumber: string) {
-  // Search in leads first
-  const { data: leadData, error: leadError } = await supabase
+  // 1. Recherche par téléphone exact
+  const { data: leadData } = await supabase
     .from('leads')
     .select('id, first_name, last_name, event_id')
     .eq('phone', phoneNumber)
     .limit(1)
     .maybeSingle();
 
-  if (leadData) {
-    return { type: 'lead', data: leadData };
-  }
+  if (leadData) return { type: 'lead', data: leadData };
 
-  // Search in client_files
-  const { data: fileData, error: fileError } = await supabase
+  const { data: fileData } = await supabase
     .from('client_files')
     .select('id, primary_contact_first_name, primary_contact_last_name')
     .eq('primary_contact_phone', phoneNumber)
     .limit(1)
     .maybeSingle();
 
-  if (fileData) {
-    return { type: 'client_file', data: fileData };
-  }
+  if (fileData) return { type: 'client_file', data: fileData };
+
+  // 2. Recherche par whatsapp_lid — cas où le LID a été remplacé par un vrai numéro
+  const { data: leadByLid } = await supabase
+    .from('leads')
+    .select('id, first_name, last_name, event_id')
+    .eq('whatsapp_lid', phoneNumber)
+    .limit(1)
+    .maybeSingle();
+
+  if (leadByLid) return { type: 'lead', data: leadByLid };
+
+  const { data: fileByLid } = await supabase
+    .from('client_files')
+    .select('id, primary_contact_first_name, primary_contact_last_name')
+    .eq('whatsapp_lid', phoneNumber)
+    .limit(1)
+    .maybeSingle();
+
+  if (fileByLid) return { type: 'client_file', data: fileByLid };
 
   return null;
 }

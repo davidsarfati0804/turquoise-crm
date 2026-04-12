@@ -382,3 +382,118 @@ Règles :
     return null;
   }
 }
+
+// ─── Dossier auto-fill ─────────────────────────────────────────────────────────
+
+/**
+ * Remplit automatiquement les champs VIDES d'un lead ou d'un dossier
+ * depuis les données extraites d'un message WhatsApp.
+ * Règle : on ne remplace jamais un champ déjà renseigné.
+ * Pour les participants : on ajoute ceux qui manquent, jamais les existants.
+ */
+export async function matchExtractedDataToDossier(
+  messageId: string,
+  extracted: ExtractedLeadInfo,
+  detectedEventId?: string,
+): Promise<{ success: boolean; updatedLeadFields?: string[]; updatedFileFields?: string[] }> {
+  try {
+    const { data: message } = await supabase
+      .from('whatsapp_messages')
+      .select('lead_id, client_file_id')
+      .eq('id', messageId)
+      .single();
+
+    if (!message) return { success: false };
+
+    const updatedLeadFields: string[] = [];
+    const updatedFileFields: string[] = [];
+
+    const isBlank = (v: string | null | undefined) =>
+      !v || ['inconnu', 'unknown', ''].includes(v.toLowerCase().trim());
+
+    // ── LEAD ──────────────────────────────────────────────────────────────────
+    if (message.lead_id) {
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', message.lead_id)
+        .single();
+
+      if (lead) {
+        const u: Record<string, unknown> = {};
+
+        if (isBlank(lead.first_name) && extracted.first_name) {
+          u.first_name = extracted.first_name;
+          updatedLeadFields.push('first_name');
+        }
+        if (isBlank(lead.last_name) && extracted.last_name) {
+          u.last_name = extracted.last_name;
+          updatedLeadFields.push('last_name');
+        }
+        if (!lead.event_id && (detectedEventId || extracted.event_id)) {
+          u.event_id = detectedEventId ?? extracted.event_id;
+          updatedLeadFields.push('event_id');
+        }
+        if (extracted.adults_count && lead.adults_count === 1 && lead.children_count === 0) {
+          u.adults_count = extracted.adults_count;
+          updatedLeadFields.push('adults_count');
+        }
+        if (extracted.children_count && lead.children_count === 0) {
+          u.children_count = extracted.children_count;
+          updatedLeadFields.push('children_count');
+        }
+
+        if (Object.keys(u).length > 0) {
+          u.updated_at = new Date().toISOString();
+          await supabase.from('leads').update(u).eq('id', message.lead_id);
+        }
+      }
+    }
+
+    // ── CLIENT FILE ───────────────────────────────────────────────────────────
+    if (message.client_file_id) {
+      const { data: file } = await supabase
+        .from('client_files')
+        .select('*')
+        .eq('id', message.client_file_id)
+        .single();
+
+      if (file) {
+        const u: Record<string, unknown> = {};
+
+        if (isBlank(file.primary_contact_first_name) && extracted.first_name) {
+          u.primary_contact_first_name = extracted.first_name;
+          updatedFileFields.push('primary_contact_first_name');
+        }
+        if (isBlank(file.primary_contact_last_name) && extracted.last_name) {
+          u.primary_contact_last_name = extracted.last_name;
+          updatedFileFields.push('primary_contact_last_name');
+        }
+        if (!file.event_id && (detectedEventId || extracted.event_id)) {
+          u.event_id = detectedEventId ?? extracted.event_id;
+          updatedFileFields.push('event_id');
+        }
+        if (extracted.adults_count && file.adults_count === 1 && file.children_count === 0) {
+          u.adults_count = extracted.adults_count;
+          u.total_participants = extracted.adults_count;
+          updatedFileFields.push('adults_count', 'total_participants');
+        }
+
+        if (Object.keys(u).length > 0) {
+          u.updated_at = new Date().toISOString();
+          await supabase.from('client_files').update(u).eq('id', message.client_file_id);
+        }
+
+        // ── PARTICIPANTS — ajoute ceux qui manquent ─────────────────────────
+        // (logique basée sur les noms extraits, pas sur ExtractedLeadInfo qui
+        //  n'a pas de tableau de noms — à enrichir si besoin)
+      }
+    }
+
+    console.log('[AI] Dossier matched:', { updatedLeadFields, updatedFileFields });
+    return { success: true, updatedLeadFields, updatedFileFields };
+  } catch (err) {
+    console.error('[AI] matchExtractedDataToDossier error:', err);
+    return { success: false };
+  }
+}
