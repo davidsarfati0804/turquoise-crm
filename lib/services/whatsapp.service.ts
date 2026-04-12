@@ -394,6 +394,7 @@ export async function sendWhatsAppMedia(
   caption?: string,
   leadId?: string,
   clientFileId?: string,
+  filename?: string,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const targetJid = toPhoneNumber.startsWith('lid:')
@@ -406,6 +407,7 @@ export async function sendWhatsAppMedia(
       message_type: mediaType,
       media_url: mediaUrl,
       media_caption: caption || null,
+      media_filename: filename || null,
       status: 'pending',
     });
 

@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendBIWhatsApp } from '@/lib/services/whatsapp.service'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { sendWhatsAppMedia } from '@/lib/services/whatsapp.service'
+import { prepareBalisesForGoogleDoc, generateBIFromGoogleDoc } from '@/lib/services/google-docs.service'
+
+const serviceSupabase = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
+
+function sanitizeFilename(str: string): string {
+  return str.replace(/[/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim()
+}
 
 /**
  * POST /api/bulletin-inscriptions/[id]/send-whatsapp
- * Envoie un BI via WhatsApp
+ * Génère le PDF du BI, l'uploade en Storage, et l'envoie via WhatsApp CRM
  */
 export async function POST(
   request: NextRequest,
@@ -14,21 +25,18 @@ export async function POST(
     const { id } = await params
     const supabase = await createClient()
 
-    // Vérifier l'authentification
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Non authentifié' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
     }
 
-    // Récupérer le BI
+    // Récupérer le BI avec le dossier client
     const { data: bi, error: biError } = await supabase
       .from('bulletin_inscriptions')
       .select(`
         *,
         client_files (
+          id,
           primary_contact_phone
         )
       `)
@@ -36,48 +44,91 @@ export async function POST(
       .maybeSingle()
 
     if (biError || !bi) {
-      return NextResponse.json(
-        { error: 'Bulletin d\'inscription non trouvé' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Bulletin d\'inscription non trouvé' }, { status: 404 })
     }
 
-    // Envoyer via WhatsApp
-    const result = await sendBIWhatsApp({
-      phone: bi.data.client.phone,
-      clientName: `${bi.data.client.first_name} ${bi.data.client.last_name}`,
-      eventName: bi.data.event.name,
-      biNumber: bi.bi_number,
-      fileReference: bi.data.file_reference,
-      biData: bi.data
-    })
+    const biData = bi.data
+    const firstName = biData?.client?.first_name || ''
+    const lastName = biData?.client?.last_name || ''
+    const eventName = biData?.event?.name || 'Evenement'
+    const phone = (bi as any).client_files?.primary_contact_phone || biData?.client?.phone
+
+    if (!phone) {
+      return NextResponse.json({ error: 'Numéro de téléphone introuvable sur ce dossier' }, { status: 400 })
+    }
+
+    // Construire le nom de fichier : BI-Prénom Nom-Événement.pdf
+    const filename = sanitizeFilename(`BI-${firstName} ${lastName}-${eventName}`) + '.pdf'
+
+    // Générer le PDF via Google Docs
+    const balises = prepareBalisesForGoogleDoc(biData)
+    const { pdfBuffer } = await generateBIFromGoogleDoc(balises, filename.replace('.pdf', ''))
+
+    // Uploader dans Supabase Storage (bucket bi-documents)
+    const storagePath = `${id}/${filename}`
+    const { error: uploadError } = await serviceSupabase.storage
+      .from('bi-documents')
+      .upload(storagePath, new Uint8Array(pdfBuffer), {
+        contentType: 'application/pdf',
+        upsert: true,
+      })
+
+    if (uploadError) {
+      // Bucket probablement inexistant — essayer de le créer
+      await serviceSupabase.storage.createBucket('bi-documents', { public: false })
+      const { error: retryError } = await serviceSupabase.storage
+        .from('bi-documents')
+        .upload(storagePath, new Uint8Array(pdfBuffer), {
+          contentType: 'application/pdf',
+          upsert: true,
+        })
+      if (retryError) {
+        return NextResponse.json({ error: `Erreur upload PDF: ${retryError.message}` }, { status: 500 })
+      }
+    }
+
+    // Créer une URL signée valable 7 jours (NanoClaw doit pouvoir la télécharger)
+    const { data: signedData, error: signError } = await serviceSupabase.storage
+      .from('bi-documents')
+      .createSignedUrl(storagePath, 7 * 24 * 60 * 60)
+
+    if (signError || !signedData?.signedUrl) {
+      return NextResponse.json({ error: `Erreur URL signée: ${signError?.message}` }, { status: 500 })
+    }
+
+    // Envoyer via WhatsApp (queued via NanoClaw IPC)
+    const clientFileId = (bi as any).client_files?.id
+    const result = await sendWhatsAppMedia(
+      phone,
+      signedData.signedUrl,
+      'document',
+      `📋 ${filename.replace('.pdf', '')}`,
+      undefined,
+      clientFileId,
+      filename,
+    )
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || 'Erreur lors de l\'envoi' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: result.error || 'Erreur lors de l\'envoi' }, { status: 500 })
     }
 
-    // Mettre à jour le statut
+    // Mettre à jour le statut du BI
     await supabase
       .from('bulletin_inscriptions')
       .update({
         sent_via_whatsapp: true,
-        whatsapp_sent_at: new Date().toISOString()
+        whatsapp_sent_at: new Date().toISOString(),
       })
       .eq('id', id)
 
     return NextResponse.json({
       success: true,
       messageId: result.messageId,
-      whatsappUrl: result.whatsappUrl
+      filename,
     })
   } catch (error) {
-    console.error('Error sending WhatsApp:', error)
-    return NextResponse.json(
-      { error: 'Erreur serveur' },
-      { status: 500 }
-    )
+    console.error('Error sending BI via WhatsApp:', error)
+    const message = error instanceof Error ? error.message : 'Erreur serveur'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

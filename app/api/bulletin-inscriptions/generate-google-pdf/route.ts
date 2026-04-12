@@ -32,7 +32,10 @@ export async function POST(request: NextRequest) {
 
     const biData = bi.data
     const balises = prepareBalisesForGoogleDoc(biData)
-    const fileName = `BI_${biData.file_reference || 'SANS_REF'}_${new Date().toISOString().slice(0, 10)}`
+    const firstName = biData?.client?.first_name || ''
+    const lastName = biData?.client?.last_name || ''
+    const eventName = biData?.event?.name || 'Evenement'
+    const fileName = `BI-${firstName} ${lastName}-${eventName}`.replace(/[/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim()
 
     const { pdfBuffer, docUrl, docId } = await generateBIFromGoogleDoc(balises, fileName)
 
