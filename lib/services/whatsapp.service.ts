@@ -278,6 +278,7 @@ export async function sendWhatsAppMessage(
         `${whatsappApiUrl}/${whatsappPhoneNumberId}/messages`,
         {
           method: 'POST',
+          signal: AbortSignal.timeout(10000),
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${whatsappApiToken}`,

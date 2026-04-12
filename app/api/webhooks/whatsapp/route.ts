@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 // Initialize Supabase server client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -264,7 +265,25 @@ function extractMessageContent(message: WhatsAppMessage): {
  */
 export async function POST(request: NextRequest) {
   try {
-    const payload: WhatsAppWebhookPayload = await request.json();
+    // Read raw body once for HMAC validation + JSON parsing
+    const rawBody = await request.text();
+
+    // Validate Meta HMAC-SHA256 signature if APP_SECRET is configured
+    const appSecret = process.env.WHATSAPP_APP_SECRET;
+    if (appSecret) {
+      const signature = request.headers.get('x-hub-signature-256');
+      if (!signature) {
+        console.warn('[WhatsApp Webhook] Missing X-Hub-Signature-256 header');
+        return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+      }
+      const expectedSig = 'sha256=' + crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
+      if (signature !== expectedSig) {
+        console.warn('[WhatsApp Webhook] Invalid HMAC signature');
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
+    }
+
+    const payload: WhatsAppWebhookPayload = JSON.parse(rawBody);
 
     // Validate it's actually from WhatsApp
     if (payload.object !== 'whatsapp_business_account') {
@@ -297,6 +316,17 @@ export async function POST(request: NextRequest) {
           } = extractMessageContent(message);
 
           console.log(`[WhatsApp] Received ${messageType} from ${phoneNumber}:`, messageContent);
+
+          // Deduplication: skip if wa_message_id already processed
+          const { data: dupCheck } = await supabase
+            .from('whatsapp_messages')
+            .select('id')
+            .eq('wa_message_id', message.id)
+            .maybeSingle();
+          if (dupCheck) {
+            console.log(`[WhatsApp] Duplicate message ignored: ${message.id}`);
+            continue;
+          }
 
           // 1. Search for existing customer
           let leadId = null;
