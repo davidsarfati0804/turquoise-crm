@@ -112,7 +112,7 @@ export function prepareBalisesForGoogleDoc(biData: any): Record<string, string> 
     // Client
     CLIENT_NOM: `${biData.client?.first_name || ''} ${biData.client?.last_name || ''}`.trim(),
     CLIENT_PAYS: biData.client?.country || 'FRANCE',
-    CLIENT_TEL: biData.client?.phone || '',
+    CLIENT_TEL: (biData.client?.phone || '').startsWith('lid:') ? '' : (biData.client?.phone || ''),
     CLIENT_EMAIL: biData.client?.email || '',
 
     // Participants
