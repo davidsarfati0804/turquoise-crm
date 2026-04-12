@@ -11,7 +11,10 @@
     "type-check": "tsc --noEmit",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
-    "postinstall": "echo '✅ Installation terminée ! Voir SETUP_GUIDE.md pour les 4 étapes suivantes'"
+    "postinstall": "echo '✅ Installation terminée ! Voir SETUP_GUIDE.md pour les 4 étapes suivantes'",
+    "test:e2e": "dotenv -e .env.test.local -- playwright test",
+    "test:e2e:ui": "dotenv -e .env.test.local -- playwright test --ui",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
@@ -51,6 +54,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^20.19.37",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
@@ -58,6 +62,7 @@
     "@typescript-eslint/parser": "^8.57.1",
     "autoprefixer": "^10.4.17",
     "dotenv": "^17.3.1",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^8.56.0",
     "eslint-config-next": "^15.0.3",
     "postcss": "^8.4.33",
