@@ -61,7 +61,11 @@ export default function MediathequePage() {
         .upload(path, file, { contentType: file.type, upsert: false })
 
       if (uploadError) {
-        setError(`Erreur upload : ${uploadError.message}`)
+        const isSize = uploadError.message?.toLowerCase().includes('size') || uploadError.message?.toLowerCase().includes('exceeded')
+        setError(isSize
+          ? `Fichier trop lourd (${sizeMB.toFixed(1)} Mo). Va dans Supabase Dashboard → Storage → Settings → "Global file size limit" et augmente la valeur.`
+          : `Erreur : ${uploadError.message}`
+        )
       }
     }
 
