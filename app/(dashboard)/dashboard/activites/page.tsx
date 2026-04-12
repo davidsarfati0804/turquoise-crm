@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import Link from 'next/link'
-import { Plus, Calendar } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 
 export default async function ActivitesPage() {
   const supabase = await createClient()
@@ -29,13 +28,6 @@ export default async function ActivitesPage() {
           <h1 className="text-3xl font-bold text-gray-900">Activités</h1>
           <p className="text-gray-600 mt-1">Suivez vos activités et rendez-vous</p>
         </div>
-        <Link
-          href="/dashboard/activites/nouveau"
-          className="flex items-center px-4 py-2 bg-turquoise-600 text-white rounded-lg hover:bg-turquoise-700 transition-colors"
-        >
-          <Plus className="w-5 h-5 mr-2" />
-          Nouvelle activité
-        </Link>
       </div>
 
       <div className="bg-white rounded-lg shadow">
@@ -110,12 +102,6 @@ export default async function ActivitesPage() {
             <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune activité pour le moment</h3>
             <p className="text-gray-600 mb-6">Commencez par créer votre première activité</p>
-            <Link
-              href="/dashboard/activites/nouveau"
-              className="inline-flex items-center px-4 py-2 bg-turquoise-600 text-white rounded-lg hover:bg-turquoise-700 transition-colors"
-            >
-              Créer une activité
-            </Link>
           </div>
         )}
       </div>
