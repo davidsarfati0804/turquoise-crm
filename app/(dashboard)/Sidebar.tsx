@@ -41,7 +41,8 @@ const navigation = [
     subItems: [
       { name: 'Généraux', href: '/dashboard/parametres?tab=general' },
       { name: 'Événements', href: '/dashboard/parametres?tab=evenements' },
-      { name: '✈️ Vols', href: '/dashboard/parametrage/vols' }
+      { name: '✈️ Vols', href: '/dashboard/parametrage/vols' },
+      { name: '🧠 IA WhatsApp', href: '/dashboard/parametrage/ia-training' }
     ]
   },
 ]
