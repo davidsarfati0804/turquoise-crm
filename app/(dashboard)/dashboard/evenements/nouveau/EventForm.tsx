@@ -22,6 +22,7 @@ export function EventForm() {
   const [error, setError] = useState('')
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([])
   const [roomPricing, setRoomPricing] = useState<Record<string, RoomPricing>>({})
+  const [eventType, setEventType] = useState('sejour')
 
   useEffect(() => {
     loadRoomTypes()
@@ -76,6 +77,8 @@ export function EventForm() {
       nightsCount = Math.floor((departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24))
     }
 
+    const ceremonyDate = formData.get('ceremony_date') as string
+
     const data = {
       name: formData.get('name') as string,
       event_type: formData.get('event_type') as string,
@@ -83,9 +86,9 @@ export function EventForm() {
       status: 'upcoming',
       start_date: arrivalDate ? new Date(arrivalDate).toISOString() : new Date().toISOString(),
       end_date: departureDate ? new Date(departureDate).toISOString() : new Date().toISOString(),
-      // New fields
       arrival_date: arrivalDate || null,
       departure_date: departureDate || null,
+      ceremony_date: ceremonyDate || null,
       nights_count: nightsCount,
       check_in_time: formData.get('check_in_time') || '15:00:00',
       check_out_time: formData.get('check_out_time') || '12:00:00',
@@ -170,6 +173,8 @@ export function EventForm() {
             id="event_type"
             name="event_type"
             required
+            value={eventType}
+            onChange={e => setEventType(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
           >
             <option value="sejour">🏖️ Séjour</option>
@@ -222,6 +227,21 @@ export function EventForm() {
             />
           </div>
         </div>
+
+        {eventType === 'mariage' && (
+          <div className="mt-4">
+            <label htmlFor="ceremony_date" className="block text-sm font-medium text-gray-700 mb-1">
+              💒 Date de cérémonie
+            </label>
+            <input
+              type="date"
+              id="ceremony_date"
+              name="ceremony_date"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
+            />
+          </div>
+        )}
+
         <p className="text-xs text-gray-500 mt-2">
           Le nombre de nuitées sera calculé automatiquement
         </p>

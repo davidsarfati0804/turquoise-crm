@@ -21,6 +21,7 @@ export function EditEventForm({ event, roomTypes, existingPricing }: Props) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [eventType, setEventType] = useState(event.event_type || 'sejour')
 
   // Initialize room pricing from existing data
   const initialPricing: Record<string, string> = {}
@@ -46,6 +47,8 @@ export function EditEventForm({ event, roomTypes, existingPricing }: Props) {
       nightsCount = Math.floor((departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24))
     }
 
+    const ceremonyDate = formData.get('ceremony_date') as string
+
     const data = {
       name: formData.get('name') as string,
       event_type: formData.get('event_type') as string,
@@ -53,6 +56,7 @@ export function EditEventForm({ event, roomTypes, existingPricing }: Props) {
       status: formData.get('status') as string,
       arrival_date: arrivalDate || null,
       departure_date: departureDate || null,
+      ceremony_date: ceremonyDate || null,
       nights_count: nightsCount,
       check_in_time: formData.get('check_in_time') || '15:00:00',
       check_out_time: formData.get('check_out_time') || '12:00:00',
@@ -136,7 +140,8 @@ export function EditEventForm({ event, roomTypes, existingPricing }: Props) {
             id="event_type"
             name="event_type"
             required
-            defaultValue={event.event_type}
+            value={eventType}
+            onChange={e => setEventType(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
           >
             <option value="sejour">🏖️ Séjour</option>
@@ -200,6 +205,17 @@ export function EditEventForm({ event, roomTypes, existingPricing }: Props) {
             />
           </div>
         </div>
+        {eventType === 'mariage' && (
+          <div className="mt-4">
+            <label htmlFor="ceremony_date" className="block text-sm font-medium text-gray-700 mb-1">
+              💒 Date de cérémonie
+            </label>
+            <input type="date" id="ceremony_date" name="ceremony_date"
+              defaultValue={event.ceremony_date?.split('T')[0] || ''}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
+            />
+          </div>
+        )}
       </div>
 
       {/* Hébergement */}

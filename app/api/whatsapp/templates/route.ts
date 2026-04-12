@@ -43,8 +43,7 @@ export async function POST(req: NextRequest) {
     .select(`
       *,
       events (
-        id, name, start_date, arrival_date, departure_date,
-        ceremony_date,
+        id, name, arrival_date, departure_date, ceremony_date,
         event_room_pricing (
           price_per_night,
           room_types ( code, name )
@@ -70,7 +69,7 @@ export async function POST(req: NextRequest) {
   content = content.replace(/{{date_fin}}/g, formatDate(event?.departure_date ?? cf?.sejour_end_date ?? null));
 
   // Résoudre {{date_ceremonie}}
-  content = content.replace(/{{date_ceremonie}}/g, formatDate(event?.start_date ?? null));
+  content = content.replace(/{{date_ceremonie}}/g, formatDate(event?.ceremony_date ?? null));
 
   // Résoudre {{liste_chambres}} depuis event_room_pricing
   const pricing = event?.event_room_pricing ?? [];
