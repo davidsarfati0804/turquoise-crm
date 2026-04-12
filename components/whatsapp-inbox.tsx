@@ -208,6 +208,7 @@ export function WhatsAppInbox() {
   const [templates, setTemplates] = useState<{ id: string; name: string; category: string; content: string }[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [resolvingTemplate, setResolvingTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
   const [showMediaLib, setShowMediaLib] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<{ name: string; path: string; url: string; type: string }[]>([]);
   const [mediaFolder, setMediaFolder] = useState('');
@@ -464,8 +465,8 @@ export function WhatsAppInbox() {
   }, [replyText, selectedPhone, sending]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  }, [handleSend]);
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!templateError) handleSend(); }
+  }, [handleSend, templateError]);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -656,14 +657,22 @@ export function WhatsAppInbox() {
   const handleInsertTemplate = useCallback(async (templateId: string) => {
     if (!selectedPhone) return;
     setResolvingTemplate(true);
+    setTemplateError(null);
     const res = await fetch('/api/whatsapp/templates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ templateId, phone: selectedPhone }),
     });
     const data = await res.json();
-    if (data.content) setReplyText(data.content);
-    setShowTemplates(false);
+    if (data.content) {
+      setReplyText(data.content);
+      setShowTemplates(false);
+      if (data.unresolved && data.unresolved.length > 0) {
+        setTemplateError(
+          `Variables non remplies : ${data.unresolved.join(', ')} — complète-les manuellement ou lie ce contact à un dossier/événement.`
+        );
+      }
+    }
     setResolvingTemplate(false);
   }, [selectedPhone]);
 
@@ -1473,6 +1482,15 @@ export function WhatsAppInbox() {
                   )}
                 </div>
               )}
+              {templateError && (
+                <div className="mb-2 flex items-start gap-2 text-xs text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                  <span className="text-orange-500 mt-0.5 flex-shrink-0">⚠️</span>
+                  <span className="flex-1">{templateError}</span>
+                  <button onClick={() => setTemplateError(null)} className="text-orange-400 hover:text-orange-600 ml-1 flex-shrink-0">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
               {sendError && (
                 <div className="mb-2 flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                   <X className="w-3.5 h-3.5 flex-shrink-0" />
@@ -1613,7 +1631,10 @@ export function WhatsAppInbox() {
                 </button>
                 <textarea
                   value={replyText}
-                  onChange={e => setReplyText(e.target.value)}
+                  onChange={e => {
+                    setReplyText(e.target.value);
+                    if (templateError && !/{{[\w]+}}/.test(e.target.value)) setTemplateError(null);
+                  }}
                   onKeyDown={handleKeyDown}
                   placeholder="Tapez un message"
                   rows={1}
@@ -1632,10 +1653,10 @@ export function WhatsAppInbox() {
                 </button>
                 <button
                   onClick={handleSend}
-                  disabled={!replyText.trim() || sending || uploading}
+                  disabled={!replyText.trim() || sending || uploading || !!templateError}
                   className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors text-white disabled:opacity-40 shadow-sm"
                   style={{ backgroundColor: WA_DARK }}
-                  title="Envoyer (Entree)"
+                  title={templateError ? 'Complète les variables avant d\'envoyer' : 'Envoyer (Entree)'}
                 >
                   {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-4 h-4 ml-0.5" />}
                 </button>

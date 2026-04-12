@@ -7,8 +7,33 @@ const supabase = createClient(
 );
 
 function formatDate(d: string | null): string {
-  if (!d) return '—';
+  if (!d) return '';
   return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function phoneVariants(phone: string): string[] {
+  const variants = new Set<string>();
+  variants.add(phone);
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('33') && digits.length === 11) {
+    variants.add('+33' + digits.slice(2));
+    variants.add('0' + digits.slice(2));
+    variants.add('33' + digits.slice(2));
+  } else if (digits.startsWith('0') && digits.length === 10) {
+    variants.add('0' + digits.slice(1));
+    variants.add('+33' + digits.slice(1));
+    variants.add('33' + digits.slice(1));
+  } else if (!digits.startsWith('0') && !digits.startsWith('33') && digits.length >= 8) {
+    variants.add('+' + digits);
+    variants.add(digits);
+  }
+  if (phone.startsWith('+')) {
+    variants.add(phone.slice(1));
+    variants.add(phone);
+  } else if (!phone.startsWith('+') && !phone.startsWith('00')) {
+    variants.add('+' + phone);
+  }
+  return Array.from(variants);
 }
 
 /** GET /api/whatsapp/templates — liste tous les templates */
@@ -37,7 +62,10 @@ export async function POST(req: NextRequest) {
 
   let content = template.content;
 
-  // Chercher un dossier lié au numéro pour remplir les variables
+  // Chercher un dossier lié au numéro pour remplir les variables (tous formats de téléphone)
+  const variants = phoneVariants(phone);
+  const orFilter = variants.map(v => `primary_contact_phone.eq.${v}`).join(',');
+
   const { data: cf } = await supabase
     .from('client_files')
     .select(`
@@ -50,7 +78,7 @@ export async function POST(req: NextRequest) {
         )
       )
     `)
-    .eq('primary_contact_phone', phone)
+    .or(orFilter)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -129,7 +157,12 @@ export async function POST(req: NextRequest) {
   // Résoudre {{nom_agent}} — depuis le profil utilisateur
   content = content.replace(/{{nom_agent}}/g, 'Aurélia');
 
-  return NextResponse.json({ content });
+  // Détecter les variables encore non résolues
+  const unresolved = Array.from(new Set(
+    [...content.matchAll(/{{(\w+)}}/g)].map(m => `{{${m[1]}}}`)
+  ));
+
+  return NextResponse.json({ content, unresolved });
 }
 
 /** PUT /api/whatsapp/templates — créer ou modifier un template */
