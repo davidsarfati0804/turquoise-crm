@@ -633,47 +633,61 @@ export function WhatsAppInbox() {
 
   const handleSavePhone = useCallback(async () => {
     if (!selectedPhone || !editPhoneValue.trim() || savingPhone) return;
-    const newPhone = editPhoneValue.trim().startsWith('+') ? editPhoneValue.trim() : '+' + editPhoneValue.trim().replace(/^0/, '33');
+    const raw = editPhoneValue.trim();
+    const newPhone = raw.startsWith('+') ? raw : '+' + raw.replace(/^00/, '').replace(/^0/, '33');
     const oldPhone = selectedPhone;
     setSavingPhone(true);
     try {
-      // 1. Migrer tous les messages de l'ancien numéro vers le nouveau
-      await supabase.from('whatsapp_messages').update({ wa_phone_number: newPhone }).eq('wa_phone_number', oldPhone);
-
-      // 2. Si l'ancien numéro était un LID → le stocker définitivement sur le dossier/lead lié
-      //    afin que les futurs messages entrants depuis ce LID retrouvent toujours le bon dossier
       if (oldPhone.startsWith('lid:')) {
-        await supabase.from('client_files')
-          .update({ whatsapp_lid: oldPhone, primary_contact_phone: newPhone })
-          .eq('primary_contact_phone', oldPhone);
-        await supabase.from('client_files')
-          .update({ whatsapp_lid: oldPhone })
-          .is('whatsapp_lid', null)
-          .in('id', (
-            await supabase.from('whatsapp_messages').select('client_file_id').eq('wa_phone_number', newPhone).not('client_file_id', 'is', null)
-          ).data?.map((r: { client_file_id: string }) => r.client_file_id) ?? []);
+        // ── Remplacement LID → vrai numéro ────────────────────────────────────
+        // 1. Trouver l'entité liée (dossier ou lead) AVANT de migrer les messages
+        const { data: linkedMsg } = await supabase
+          .from('whatsapp_messages')
+          .select('client_file_id, lead_id')
+          .eq('wa_phone_number', oldPhone)
+          .not('client_file_id', 'is', null)
+          .limit(1)
+          .maybeSingle();
 
-        await supabase.from('leads')
-          .update({ whatsapp_lid: oldPhone, phone: newPhone })
-          .eq('phone', oldPhone);
-      }
+        const { data: linkedMsgLead } = !linkedMsg ? await supabase
+          .from('whatsapp_messages')
+          .select('lead_id')
+          .eq('wa_phone_number', oldPhone)
+          .not('lead_id', 'is', null)
+          .limit(1)
+          .maybeSingle() : { data: null };
 
-      // 3. Mettre à jour primary_contact_phone sur les dossiers qui avaient le LID
-      //    et mettre à jour le téléphone des leads
-      if (!oldPhone.startsWith('lid:')) {
+        const clientFileId = linkedMsg?.client_file_id;
+        const leadId = linkedMsg?.lead_id ?? linkedMsgLead?.lead_id;
+
+        // 2. Stocker le LID sur l'entité + mettre à jour le vrai numéro
+        if (clientFileId) {
+          await supabase.from('client_files')
+            .update({ whatsapp_lid: oldPhone, primary_contact_phone: newPhone })
+            .eq('id', clientFileId);
+        }
+        if (leadId) {
+          await supabase.from('leads')
+            .update({ whatsapp_lid: oldPhone, phone: newPhone })
+            .eq('id', leadId);
+        }
+
+        // 3. Migrer tous les messages LID vers le vrai numéro
+        await supabase.from('whatsapp_messages')
+          .update({ wa_phone_number: newPhone })
+          .eq('wa_phone_number', oldPhone);
+
+      } else {
+        // ── Correction d'un vrai numéro ───────────────────────────────────────
+        await supabase.from('whatsapp_messages').update({ wa_phone_number: newPhone }).eq('wa_phone_number', oldPhone);
         await supabase.from('client_files').update({ primary_contact_phone: newPhone }).eq('primary_contact_phone', oldPhone);
         await supabase.from('leads').update({ phone: newPhone }).eq('phone', oldPhone);
       }
 
-      // 4. RPC optionnelle de rattachement
-      try { await supabase.rpc('link_whatsapp_phone_to_crm', { p_phone: newPhone }); } catch { /* RPC optionnelle */ }
-
-      // 5. Mettre à jour la conversation dans l'état local
+      // Mettre à jour la conversation dans l'état local
       setConversations(prev => prev.map(c => c.phone === oldPhone ? { ...c, phone: newPhone } : c));
       setSelectedPhone(newPhone);
       setEditingPhone(false);
-
-      // 6. Recharger la fiche client avec le nouveau numéro
       await loadClientInfo(newPhone);
     } finally {
       setSavingPhone(false);
@@ -1019,8 +1033,8 @@ export function WhatsAppInbox() {
                         value={editPhoneValue}
                         onChange={e => setEditPhoneValue(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') handleSavePhone(); if (e.key === 'Escape') setEditingPhone(false); }}
-                        placeholder="+33612345678"
-                        className="text-xs border border-teal-400 rounded px-2 py-0.5 w-36 outline-none focus:ring-1 focus:ring-teal-500"
+                        placeholder="0612345678 ou +33612345678"
+                        className="text-xs border border-teal-400 rounded px-2 py-0.5 w-40 outline-none focus:ring-1 focus:ring-teal-500"
                       />
                       <button onClick={handleSavePhone} disabled={savingPhone} className="text-teal-600 hover:text-teal-800 disabled:opacity-40">
                         {savingPhone ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
@@ -1033,13 +1047,13 @@ export function WhatsAppInbox() {
                     <div className="flex items-center gap-1 group">
                       <p className="text-xs text-gray-500">
                         {selectedPhone.startsWith('lid:')
-                          ? <span className="text-amber-500 font-medium">LID — numéro inconnu</span>
+                          ? <span className="text-gray-400 italic">Numéro non renseigné</span>
                           : formatPhone(selectedPhone)}
                       </p>
                       <button
-                        onClick={() => { setEditPhoneValue(selectedPhone.startsWith('lid:') ? '' : selectedPhone); setEditingPhone(true); }}
+                        onClick={() => { setEditPhoneValue(''); setEditingPhone(true); }}
                         className="text-gray-400 hover:text-teal-600 transition-colors"
-                        title="Modifier le numéro"
+                        title={selectedPhone.startsWith('lid:') ? 'Ajouter le numéro de téléphone' : 'Modifier le numéro'}
                       >
                         <Pencil className="w-3 h-3" />
                       </button>
@@ -1150,7 +1164,7 @@ export function WhatsAppInbox() {
                 const fields = [
                   { key: 'first_name', label: 'Prénom', value: lead.first_name !== 'Client' ? lead.first_name : null, dbKey: 'first_name' },
                   { key: 'last_name', label: 'Nom', value: lead.last_name !== 'WhatsApp' ? lead.last_name : null, dbKey: 'last_name' },
-                  { key: 'phone', label: 'Téléphone', value: selectedPhone.startsWith('lid:') ? null : formatPhone(selectedPhone), dbKey: null, readOnly: true },
+                  { key: 'phone', label: 'Téléphone', value: selectedPhone.startsWith('lid:') ? null : formatPhone(selectedPhone), dbKey: null, readOnly: true, placeholder: 'Non renseigné' },
                   { key: 'event', label: 'Événement', value: lead.events?.name || null, dbKey: 'event_id', readOnly: false },
                   { key: 'travelers', label: 'Voyageurs', value: lead.adults_count > 1 || lead.children_count > 0 || lead.babies_count > 0
                     ? `${lead.adults_count} ad.${lead.children_count ? ` ${lead.children_count} enf.` : ''}${lead.babies_count ? ` ${lead.babies_count} bb.` : ''}`
