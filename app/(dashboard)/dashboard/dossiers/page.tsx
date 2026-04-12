@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { FolderOpen, Search, Download } from 'lucide-react'
+import { FolderOpen, Pencil, Eye } from 'lucide-react'
 import { CRM_STATUS_LABELS, PAYMENT_STATUS_LABELS } from '@/lib/constants/statuses'
 import { STATUS_COLORS } from '@/lib/constants/colors'
 
@@ -72,11 +72,12 @@ export default async function DossiersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paiement</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prix</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mis à jour</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {dossiers.map((dossier: any) => (
-                  <tr key={dossier.id} className="hover:bg-gray-50">
+                  <tr key={dossier.id} className="hover:bg-gray-50 group">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link
                         href={`/dashboard/dossiers/${dossier.id}`}
@@ -119,6 +120,24 @@ export default async function DossiersPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(dossier.updated_at).toLocaleDateString('fr-FR')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Link
+                          href={`/dashboard/dossiers/${dossier.id}`}
+                          className="p-1.5 text-gray-400 hover:text-turquoise-600 hover:bg-turquoise-50 rounded transition-colors"
+                          title="Voir le dossier"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Link>
+                        <Link
+                          href={`/dashboard/dossiers/${dossier.id}/modifier`}
+                          className="p-1.5 text-gray-400 hover:text-turquoise-600 hover:bg-turquoise-50 rounded transition-colors"
+                          title="Modifier le dossier"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

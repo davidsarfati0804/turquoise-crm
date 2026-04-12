@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { DollarSign, Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { DollarSign, Clock, CheckCircle, AlertCircle, Pencil, ExternalLink } from 'lucide-react'
 import { PAYMENT_STATUS_LABELS, CRM_STATUS_LABELS } from '@/lib/constants/statuses'
 import { STATUS_COLORS } from '@/lib/constants/colors'
 
@@ -120,11 +120,12 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paiement</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Montant dû</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Solde</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filtered.map((d: any) => (
-                  <tr key={d.id} className="hover:bg-gray-50">
+                  <tr key={d.id} className="hover:bg-gray-50 group">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link href={`/dashboard/dossiers/${d.id}`} className="text-turquoise-600 hover:text-turquoise-800 font-medium">
                         {d.file_reference}
@@ -159,6 +160,24 @@ export default async function PaiementsPage({ searchParams }: { searchParams: Pr
                           {fmt(Math.max(0, (d.quoted_price || 0) - (d.amount_paid || 0)))}
                         </span>
                       ) : '—'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Link
+                          href={`/dashboard/dossiers/${d.id}`}
+                          className="p-1.5 text-gray-400 hover:text-turquoise-600 hover:bg-turquoise-50 rounded transition-colors"
+                          title="Voir le dossier"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Link>
+                        <Link
+                          href={`/dashboard/dossiers/${d.id}/modifier`}
+                          className="p-1.5 text-gray-400 hover:text-turquoise-600 hover:bg-turquoise-50 rounded transition-colors"
+                          title="Modifier le dossier"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

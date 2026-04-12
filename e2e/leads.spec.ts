@@ -11,17 +11,21 @@ test.describe('Leads', () => {
     await expect(page.locator('table, [data-testid="leads-list"], .leads-list').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('bouton créer un lead visible', async ({ page }) => {
-    const createBtn = page.getByRole('button', { name: /nouveau lead|créer|ajouter/i });
-    await expect(createBtn).toBeVisible();
+  test('lien créer un lead visible', async ({ page }) => {
+    // "Nouveau lead" est un <Link> Next.js (role=link), pas un <button>
+    const createLink = page.getByRole('link', { name: /nouveau lead/i });
+    await expect(createLink).toBeVisible();
   });
 
-  test('ouvrir modale création lead', async ({ page }) => {
-    const createBtn = page.getByRole('button', { name: /nouveau lead|créer|ajouter/i });
-    await createBtn.click();
+  test('naviguer vers page création lead', async ({ page }) => {
+    const createLink = page.getByRole('link', { name: /nouveau lead/i });
+    await createLink.click();
 
-    // Une modale ou formulaire doit apparaître
-    await expect(page.getByRole('dialog').or(page.locator('form')).first()).toBeVisible({ timeout: 5000 });
+    // Doit naviguer vers /dashboard/leads/nouveau
+    await expect(page).toHaveURL(/leads\/nouveau/, { timeout: 10000 });
+    await expect(page.locator('body')).not.toContainText('Application error');
+    // Un formulaire doit être présent
+    await expect(page.locator('form, [role="form"], input').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('recherche leads fonctionne', async ({ page }) => {

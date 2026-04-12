@@ -13,7 +13,7 @@ test.describe('Événements', () => {
   });
 
   test('naviguer vers un événement', async ({ page }) => {
-    const eventLink = page.locator('a[href*="/evenements/"]').first();
+    const eventLink = page.locator('a[href*="/evenements/"]:not([href*="/nouveau"]):not([href*="/modifier"])').first();
     const count = await eventLink.count();
 
     if (count > 0) {
@@ -25,8 +25,9 @@ test.describe('Événements', () => {
     }
   });
 
-  test('les 8 onglets de détail événement sont accessibles', async ({ page }) => {
-    const eventLink = page.locator('a[href*="/evenements/"]').first();
+  test('les onglets de détail événement sont accessibles', async ({ page }) => {
+    // Exclure les liens /nouveau et /modifier — on veut un vrai événement existant
+    const eventLink = page.locator('a[href*="/evenements/"]:not([href*="/nouveau"]):not([href*="/modifier"])').first();
     const count = await eventLink.count();
     if (count === 0) {
       test.skip(true, 'Aucun événement');
@@ -36,9 +37,11 @@ test.describe('Événements', () => {
     await eventLink.click();
     await page.waitForURL(/evenements\/.+/);
 
-    // Attendre les onglets
-    const tabs = page.getByRole('tab');
-    await expect(tabs.first()).toBeVisible({ timeout: 10000 });
+    // Les onglets sont des <button> dans <nav aria-label="Tabs">, pas role="tab"
+    // On attend que React hydrate le composant client EventTabs
+    await page.waitForSelector('nav[aria-label="Tabs"] button', { timeout: 15000 });
+    const tabs = page.locator('nav[aria-label="Tabs"] button');
+    await expect(tabs.first()).toBeVisible({ timeout: 5000 });
 
     const tabCount = await tabs.count();
     console.log(`Nombre d'onglets trouvés: ${tabCount}`);

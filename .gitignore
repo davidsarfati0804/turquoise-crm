@@ -8,6 +8,7 @@ coverage/
 .nyc_output
 /e2e/.auth/
 /test-results/
+/.playwright-mcp/
 /playwright-report/
 .env.test.local
 

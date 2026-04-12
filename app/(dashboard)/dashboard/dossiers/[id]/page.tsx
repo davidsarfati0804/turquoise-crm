@@ -94,6 +94,13 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
 
           {/* Boutons de gestion du dossier */}
           <div className="flex flex-col items-end gap-2">
+            <Link
+              href={`/dashboard/dossiers/${clientFile.id}/modifier`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-turquoise-700 bg-turquoise-50 hover:bg-turquoise-100 border border-turquoise-200 rounded-lg transition-colors"
+            >
+              <Edit className="w-3.5 h-3.5" />
+              Modifier
+            </Link>
             <ManageDossierActions
               dossierId={clientFile.id}
               dossierReference={clientFile.file_reference}

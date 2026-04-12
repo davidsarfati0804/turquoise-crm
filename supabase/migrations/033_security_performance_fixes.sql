@@ -40,12 +40,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_send_queue_idempotency
 -- 3. Missing performance indexes
 -- ============================================================
 
--- WhatsApp templates
-CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_category
-  ON whatsapp_templates(category);
-
-CREATE INDEX IF NOT EXISTS idx_whatsapp_response_templates_category
-  ON whatsapp_response_templates(category);
+-- WhatsApp templates (only if tables exist)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'whatsapp_templates') THEN
+    CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_category ON whatsapp_templates(category);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'whatsapp_response_templates') THEN
+    CREATE INDEX IF NOT EXISTS idx_whatsapp_response_templates_category ON whatsapp_response_templates(category);
+  END IF;
+END $$;
 
 -- WhatsApp messages — for processing queue lookups
 CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_processing

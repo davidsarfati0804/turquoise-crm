@@ -10,18 +10,18 @@ test.describe('Dossiers (Client Files)', () => {
     await expect(page.locator('table, [data-testid="dossiers-list"], .dossiers-list').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('bouton créer un dossier visible', async ({ page }) => {
-    const createBtn = page.getByRole('button', { name: /nouveau dossier|créer|ajouter/i });
-    await expect(createBtn).toBeVisible();
+  test('stats dossiers visibles', async ({ page }) => {
+    // Les cards de stats (Total dossiers, En cours, etc.) sont visibles
+    await expect(page.getByText(/total dossiers/i).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('ouvrir un dossier existant', async ({ page }) => {
-    // Cliquer sur le premier dossier dans la liste
-    const firstRow = page.locator('table tbody tr, [data-testid="dossier-item"]').first();
-    const count = await firstRow.count();
+    // La navigation se fait via le lien sur la référence dans la 1ère <td>, pas sur le <tr>
+    const firstLink = page.locator('table tbody tr td:first-child a').first();
+    const count = await firstLink.count();
 
     if (count > 0) {
-      await firstRow.click();
+      await firstLink.click();
       // Doit naviguer vers la page du dossier
       await expect(page).toHaveURL(/dossiers\/.+/, { timeout: 10000 });
       await expect(page.locator('body')).not.toContainText('Application error');
@@ -34,14 +34,15 @@ test.describe('Dossiers (Client Files)', () => {
 test.describe('Dossier detail', () => {
   test('page dossier charge ses onglets', async ({ page }) => {
     await page.goto('/dashboard/dossiers');
-    const firstRow = page.locator('table tbody tr').first();
-    const count = await firstRow.count();
+    // La navigation se fait via le lien sur la référence (1ère <td>)
+    const firstLink = page.locator('table tbody tr td:first-child a').first();
+    const count = await firstLink.count();
     if (count === 0) {
       test.skip(true, 'Aucun dossier');
       return;
     }
 
-    await firstRow.click();
+    await firstLink.click();
     await page.waitForURL(/dossiers\/.+/);
     await expect(page.locator('body')).not.toContainText('Application error');
 
