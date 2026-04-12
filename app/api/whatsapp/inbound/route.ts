@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { analyzeImageWithOCR } from '@/lib/services/whatsapp-ai.service';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,6 +17,12 @@ interface NanoclawInboundPayload {
   sender: string;
   sender_name: string;
   content: string;
+  /** 'text' | 'image' | 'video' | 'document' | 'audio' | 'sticker' */
+  message_type?: string;
+  /** Public URL of the media (for image, video, document) */
+  media_url?: string;
+  /** Original filename for documents */
+  media_filename?: string;
   timestamp: string;
   is_from_me: boolean;
 }
@@ -89,7 +96,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { id, chat_jid, sender_name, content, timestamp, is_from_me } = payload;
+  const { id, chat_jid, sender_name, content, timestamp, is_from_me, message_type, media_url, media_filename } = payload;
 
   if (!id || !chat_jid || !content) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -136,24 +143,97 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { leadId, clientFileId } = await findCustomer(phoneNumber);
+  let { leadId, clientFileId } = await findCustomer(phoneNumber);
+
+  // ── LID / phone merging ────────────────────────────────────────────────────
+  // When a real phone arrives and we can link it to a client_file or lead,
+  // check if there are LID messages stored for the same entity and merge them
+  // under the real phone number so both sides appear in one conversation.
+  if (!phoneNumber.startsWith('lid:') && (clientFileId || leadId)) {
+    if (clientFileId) {
+      const { data: lidRows } = await supabase
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('client_file_id', clientFileId)
+        .like('wa_phone_number', 'lid:%')
+        .limit(1);
+      if (lidRows && lidRows.length > 0) {
+        await supabase
+          .from('whatsapp_messages')
+          .update({ wa_phone_number: phoneNumber })
+          .eq('client_file_id', clientFileId)
+          .like('wa_phone_number', 'lid:%');
+      }
+    }
+    if (leadId) {
+      const { data: lidRows } = await supabase
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('lead_id', leadId)
+        .like('wa_phone_number', 'lid:%')
+        .limit(1);
+      if (lidRows && lidRows.length > 0) {
+        await supabase
+          .from('whatsapp_messages')
+          .update({ wa_phone_number: phoneNumber })
+          .eq('lead_id', leadId)
+          .like('wa_phone_number', 'lid:%');
+      }
+    }
+  }
+
+  // When a LID arrives and the entity already has real-phone messages,
+  // store this LID message under the real phone to keep one conversation.
+  if (phoneNumber.startsWith('lid:') && (clientFileId || leadId)) {
+    const entityFilter = clientFileId
+      ? supabase.from('whatsapp_messages').select('wa_phone_number').eq('client_file_id', clientFileId)
+      : supabase.from('whatsapp_messages').select('wa_phone_number').eq('lead_id', leadId!);
+
+    const { data: realPhoneRow } = await entityFilter
+      .not('wa_phone_number', 'like', 'lid:%')
+      .limit(1)
+      .maybeSingle();
+
+    if (realPhoneRow) {
+      // Re-route this LID message to the real phone conversation
+      phoneNumber = realPhoneRow.wa_phone_number as string;
+    }
+  }
 
   // is_from_me=true means the message was sent from the user's phone → store as outbound
   const direction = is_from_me ? 'outbound' : 'inbound';
   const delivery_status = is_from_me ? 'sent' : 'delivered';
+  const msgType = message_type || 'text';
+
+  // Build base metadata
+  const metadata: Record<string, unknown> = {};
+  if (media_url) metadata.media_url = media_url;
+  if (media_filename) metadata.media_filename = media_filename;
+
+  // ── OCR automatique pour les images inbound des clients ───────────────────
+  // Analyse le document/photo dès réception pour extraire les infos (billets d'avion, passeports…)
+  if (msgType === 'image' && media_url && !is_from_me) {
+    try {
+      const ocr = await analyzeImageWithOCR(media_url);
+      if (ocr) metadata.ocr = ocr;
+    } catch {
+      // OCR non bloquant — on continue même en cas d'erreur
+    }
+  }
 
   const { error } = await supabase.from('whatsapp_messages').insert({
     wa_message_id: id,
     wa_phone_number: phoneNumber,
     wa_display_name: is_from_me ? null : (sender_name || null),
     message_content: content,
-    message_type: 'text',
+    message_type: msgType,
     direction,
     delivery_status,
     lead_id: leadId,
     client_file_id: clientFileId,
     processing_status: 'pending',
     created_at: timestamp,
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   });
 
   if (error) {

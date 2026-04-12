@@ -62,6 +62,31 @@ export interface ExtractedLeadInfo {
   notes?: string;
 }
 
+export type OcrDocumentType = 'flight_ticket' | 'passport' | 'id_card' | 'hotel_voucher' | 'invoice' | 'unknown';
+
+export interface OcrResult {
+  document_type: OcrDocumentType;
+  confidence: 'high' | 'medium' | 'low';
+  // Vol (billet d'avion)
+  passenger_name?: string;
+  flight_number?: string;
+  flight_date?: string;        // YYYY-MM-DD
+  departure_airport?: string;  // ex: "CDG - Paris Charles de Gaulle"
+  arrival_airport?: string;    // ex: "MRU - Île Maurice"
+  departure_time?: string;     // ex: "14:35"
+  arrival_time?: string;       // ex: "06:10"
+  booking_reference?: string;
+  seat?: string;
+  cabin_class?: string;        // Économique, Affaires, Première
+  // Passeport / CI
+  doc_number?: string;
+  nationality?: string;
+  date_of_birth?: string;      // YYYY-MM-DD
+  expiry_date?: string;        // YYYY-MM-DD
+  // Résumé libre
+  summary?: string;
+}
+
 // ─── Core functions ────────────────────────────────────────────────────────────
 
 /**
@@ -258,5 +283,102 @@ export async function generateWhatsAppSuggestion(
       success: false,
       error: err instanceof Error ? err.message : 'Erreur Claude',
     };
+  }
+}
+
+/**
+ * Analyse une image envoyée par un client (billet d'avion, passeport, CI…)
+ * via Claude Vision et retourne les données structurées extraites.
+ */
+export async function analyzeImageWithOCR(imageUrl: string): Promise<OcrResult | null> {
+  const anthropic = getAnthropic();
+  if (!anthropic) return null;
+
+  // Fetch image and convert to base64 (Claude Vision requires base64 or specific URL schemes)
+  let imageBase64: string;
+  let mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+  try {
+    const resp = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
+    if (!resp.ok) return null;
+    const contentType = resp.headers.get('content-type') || 'image/jpeg';
+    mediaType = (
+      contentType.includes('png') ? 'image/png' :
+      contentType.includes('webp') ? 'image/webp' :
+      contentType.includes('gif') ? 'image/gif' :
+      'image/jpeg'
+    ) as typeof mediaType;
+    const buffer = await resp.arrayBuffer();
+    imageBase64 = Buffer.from(buffer).toString('base64');
+  } catch {
+    return null;
+  }
+
+  const prompt = `Analyse ce document envoyé par un client d'une agence de voyage.
+
+Identifie le type de document et extrais toutes les informations visibles.
+Retourne UNIQUEMENT du JSON valide, rien d'autre :
+
+{
+  "document_type": "flight_ticket|passport|id_card|hotel_voucher|invoice|unknown",
+  "confidence": "high|medium|low",
+  "passenger_name": null,
+  "flight_number": null,
+  "flight_date": null,
+  "departure_airport": null,
+  "arrival_airport": null,
+  "departure_time": null,
+  "arrival_time": null,
+  "booking_reference": null,
+  "seat": null,
+  "cabin_class": null,
+  "doc_number": null,
+  "nationality": null,
+  "date_of_birth": null,
+  "expiry_date": null,
+  "summary": null
+}
+
+Règles :
+- flight_date : format YYYY-MM-DD
+- date_of_birth / expiry_date : format YYYY-MM-DD
+- departure_airport / arrival_airport : inclure le code IATA si visible, ex: "CDG - Paris Charles de Gaulle" ou "MRU - Maurice"
+- summary : résumé en 1 ligne de ce que tu vois (toujours rempli)
+- null pour les champs non visibles ou non applicables`;
+
+  try {
+    const response = await Promise.race([
+      anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: imageBase64 },
+            },
+            { type: 'text', text: prompt },
+          ],
+        }],
+      }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
+    ]);
+
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : null;
+    if (!text) return null;
+
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+
+    const raw = JSON.parse(match[0]) as OcrResult;
+    // Filter nulls for cleanliness but keep document_type and confidence
+    return {
+      ...Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== null && v !== undefined)),
+      document_type: raw.document_type || 'unknown',
+      confidence: raw.confidence || 'low',
+    } as OcrResult;
+  } catch (err) {
+    console.error('[OCR] Claude error:', err);
+    return null;
   }
 }

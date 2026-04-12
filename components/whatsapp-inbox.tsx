@@ -12,6 +12,26 @@ import {
 import { format, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
+interface OcrResult {
+  document_type: 'flight_ticket' | 'passport' | 'id_card' | 'hotel_voucher' | 'invoice' | 'unknown';
+  confidence: 'high' | 'medium' | 'low';
+  passenger_name?: string;
+  flight_number?: string;
+  flight_date?: string;
+  departure_airport?: string;
+  arrival_airport?: string;
+  departure_time?: string;
+  arrival_time?: string;
+  booking_reference?: string;
+  seat?: string;
+  cabin_class?: string;
+  doc_number?: string;
+  nationality?: string;
+  date_of_birth?: string;
+  expiry_date?: string;
+  summary?: string;
+}
+
 interface WhatsAppMessage {
   id: string;
   wa_message_id?: string;
@@ -22,7 +42,7 @@ interface WhatsAppMessage {
   direction: 'inbound' | 'outbound';
   delivery_status: string;
   created_at: string;
-  metadata?: { media_url?: string; [key: string]: unknown };
+  metadata?: { media_url?: string; media_filename?: string; ocr?: OcrResult; [key: string]: unknown };
 }
 
 interface LeadRecord {
@@ -219,6 +239,12 @@ export function WhatsAppInbox() {
   const [editPhoneValue, setEditPhoneValue] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  // AI dossier extraction
+  const [dossierExtraction, setDossierExtraction] = useState<Record<string, unknown> | null>(null);
+  const [extractingDossier, setExtractingDossier] = useState(false);
+  const [dossierExtractionError, setDossierExtractionError] = useState<string | null>(null);
+  const [dossierFieldSelection, setDossierFieldSelection] = useState<Set<string>>(new Set());
+  const [applyingDossier, setApplyingDossier] = useState(false);
 
   const selectedPhoneRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -644,6 +670,60 @@ export function WhatsAppInbox() {
       setLinkingId(null);
     }
   }, [selectedPhone, linkingId, supabase, loadClientInfo, router]);
+
+  /** Trigger AI extraction of all dossier fields from the conversation */
+  const handleExtractDossier = useCallback(async (dossierId: string) => {
+    if (!selectedPhone || extractingDossier) return;
+    setExtractingDossier(true);
+    setDossierExtraction(null);
+    setDossierExtractionError(null);
+    setDossierFieldSelection(new Set());
+    try {
+      const res = await fetch('/api/whatsapp/extract-dossier', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: selectedPhone, dossierId }),
+      });
+      const data = await res.json();
+      if (data.error) { setDossierExtractionError(data.error); return; }
+      if (data.extracted && Object.keys(data.extracted).length > 0) {
+        setDossierExtraction(data.extracted);
+        // Pre-select all fields
+        setDossierFieldSelection(new Set(Object.keys(data.extracted)));
+      } else {
+        setDossierExtractionError('Aucune information détectée dans la conversation.');
+      }
+    } catch {
+      setDossierExtractionError('Erreur réseau');
+    } finally {
+      setExtractingDossier(false);
+    }
+  }, [selectedPhone, extractingDossier]);
+
+  /** Apply validated fields to the dossier */
+  const handleApplyDossierExtraction = useCallback(async (dossierId: string) => {
+    if (!dossierExtraction || applyingDossier) return;
+    setApplyingDossier(true);
+    const selected = Object.fromEntries(
+      Object.entries(dossierExtraction).filter(([k]) => dossierFieldSelection.has(k))
+    );
+    const childrenAges = dossierFieldSelection.has('children_ages') && Array.isArray(dossierExtraction.children_ages)
+      ? dossierExtraction.children_ages as number[]
+      : undefined;
+
+    try {
+      await fetch('/api/whatsapp/apply-dossier-extraction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dossierId, fields: selected, childrenAges }),
+      });
+      setDossierExtraction(null);
+      setDossierFieldSelection(new Set());
+      await loadClientInfo(selectedPhone!);
+    } finally {
+      setApplyingDossier(false);
+    }
+  }, [dossierExtraction, applyingDossier, dossierFieldSelection, loadClientInfo, selectedPhone]);
 
   const loadTemplates = useCallback(async () => {
     if (templates.length > 0) { setShowTemplates(true); return; }
@@ -1232,36 +1312,120 @@ export function WhatsAppInbox() {
                   </p>
                   <div className="flex flex-col gap-2">
                     {clientInfo.dossiers.map(dos => (
-                      <a
-                        key={dos.id}
-                        href={`/dashboard/dossiers/${dos.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-colors group"
-                      >
-                        <FolderOpen className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {dos.primary_contact_first_name} {dos.primary_contact_last_name}
-                          </p>
-                          <p className="text-xs text-gray-400 truncate">
-                            {dos.events?.name || '—'}
-                            {dos.events?.start_date ? ` · ${new Date(dos.events.start_date).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}` : ''}
-                          </p>
-                          {dos.quoted_price && (
-                            <p className="text-xs text-gray-500">
-                              {dos.amount_paid != null ? `${dos.amount_paid.toLocaleString('fr-FR')} / ` : ''}{dos.quoted_price.toLocaleString('fr-FR')} €
+                      <div key={dos.id} className="rounded-lg border border-gray-100 overflow-hidden">
+                        <a
+                          href={`/dashboard/dossiers/${dos.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 p-2.5 hover:bg-gray-50 transition-colors group"
+                        >
+                          <FolderOpen className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {dos.primary_contact_first_name} {dos.primary_contact_last_name}
                             </p>
-                          )}
+                            <p className="text-xs text-gray-400 truncate">
+                              {dos.events?.name || '—'}
+                              {dos.events?.start_date ? ` · ${new Date(dos.events.start_date).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}` : ''}
+                            </p>
+                            {dos.quoted_price && (
+                              <p className="text-xs text-gray-500">
+                                {dos.amount_paid != null ? `${dos.amount_paid.toLocaleString('fr-FR')} / ` : ''}{dos.quoted_price.toLocaleString('fr-FR')} €
+                              </p>
+                            )}
+                          </div>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                            dos.crm_status === 'confirme' ? 'bg-green-100 text-green-700' :
+                            dos.crm_status === 'en_attente' ? 'bg-amber-100 text-amber-700' :
+                            dos.crm_status === 'annule' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-500'
+                          }`}>{dos.crm_status}</span>
+                          <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                        </a>
+                        {/* AI detect button */}
+                        <div className="border-t border-gray-100 px-2.5 py-2">
+                          <button
+                            onClick={() => {
+                              if (dossierExtraction) { setDossierExtraction(null); setDossierFieldSelection(new Set()); }
+                              else handleExtractDossier(dos.id);
+                            }}
+                            disabled={extractingDossier}
+                            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-teal-700 hover:text-teal-900 hover:bg-teal-50 rounded-md py-1.5 transition-colors disabled:opacity-50"
+                          >
+                            {extractingDossier ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                            {dossierExtraction ? 'Fermer la détection' : 'Détecter les infos depuis la conversation'}
+                          </button>
                         </div>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                          dos.crm_status === 'confirme' ? 'bg-green-100 text-green-700' :
-                          dos.crm_status === 'en_attente' ? 'bg-amber-100 text-amber-700' :
-                          dos.crm_status === 'annule' ? 'bg-red-100 text-red-700' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>{dos.crm_status}</span>
-                        <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
-                      </a>
+
+                        {/* AI extraction results panel */}
+                        {dossierExtraction && (
+                          <div className="border-t border-teal-100 bg-teal-50 p-3">
+                            {dossierExtractionError && (
+                              <p className="text-xs text-red-600 mb-2">{dossierExtractionError}</p>
+                            )}
+                            <p className="text-[11px] font-semibold text-teal-800 mb-2">Infos détectées — coche ce que tu veux appliquer :</p>
+                            <div className="flex flex-col gap-1.5">
+                              {Object.entries(dossierExtraction).map(([key, val]) => {
+                                const label: Record<string, string> = {
+                                  first_name: 'Prénom', last_name: 'Nom',
+                                  arrival_date: 'Date arrivée', departure_date: 'Date départ',
+                                  adults_count: 'Adultes', children_count: 'Enfants', babies_count: 'Bébés',
+                                  children_ages: 'Âges enfants', flight_inbound: 'Vol arrivée',
+                                  flight_outbound: 'Vol départ', room_type_name: 'Chambre',
+                                  room_type_id: null as unknown as string,
+                                  nb_chambres: 'Nb chambres', budget: 'Budget (€)',
+                                  event_name: 'Événement', event_id: null as unknown as string,
+                                  notes: 'Notes',
+                                };
+                                if (!label[key]) return null; // skip hidden keys (ids)
+                                const isChecked = dossierFieldSelection.has(key);
+                                const displayVal = Array.isArray(val) ? val.join(', ') + ' ans' : String(val);
+                                return (
+                                  <label key={key} className="flex items-start gap-2 cursor-pointer group">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={e => {
+                                        setDossierFieldSelection(prev => {
+                                          const n = new Set(prev);
+                                          if (e.target.checked) {
+                                            n.add(key);
+                                            // if checking room_type_name, also check room_type_id
+                                            if (key === 'room_type_name' && dossierExtraction.room_type_id) n.add('room_type_id');
+                                            if (key === 'event_name' && dossierExtraction.event_id) n.add('event_id');
+                                          } else {
+                                            n.delete(key);
+                                            if (key === 'room_type_name') n.delete('room_type_id');
+                                            if (key === 'event_name') n.delete('event_id');
+                                          }
+                                          return n;
+                                        });
+                                      }}
+                                      className="mt-0.5 accent-teal-600 flex-shrink-0"
+                                    />
+                                    <div className="min-w-0">
+                                      <span className="text-[10px] text-teal-700 font-medium">{label[key]}</span>
+                                      <p className="text-xs text-gray-800 break-words leading-tight">{displayVal}</p>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <button
+                              onClick={() => handleApplyDossierExtraction(dos.id)}
+                              disabled={applyingDossier || dossierFieldSelection.size === 0}
+                              className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-50"
+                              style={{ backgroundColor: WA_DARK }}
+                            >
+                              {applyingDossier ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              Appliquer {dossierFieldSelection.size > 0 ? `(${dossierFieldSelection.size} champs)` : ''}
+                            </button>
+                          </div>
+                        )}
+                        {dossierExtractionError && !dossierExtraction && (
+                          <p className="text-[10px] text-red-500 px-2.5 pb-2">{dossierExtractionError}</p>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1369,6 +1533,79 @@ export function WhatsAppInbox() {
                             <p className="text-gray-400 text-[10px] mt-0.5">PDF · Appuyer pour ouvrir</p>
                           </div>
                         </a>
+                      ) : msg.message_type === 'image' ? (
+                        <div>
+                          {msg.metadata?.media_url ? (
+                            <a href={msg.metadata.media_url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={msg.metadata.media_url}
+                                alt="Photo"
+                                className="rounded-t-[6px] max-w-full block"
+                                style={{ maxHeight: 260, objectFit: 'cover', width: '100%' }}
+                              />
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 px-3 py-2 text-gray-400">
+                              <ImageIcon className="w-5 h-5" />
+                              <span className="text-xs">Photo</span>
+                            </div>
+                          )}
+                          {msg.metadata?.ocr && (() => {
+                            const ocr = msg.metadata.ocr as OcrResult;
+                            const icons: Record<string, string> = {
+                              flight_ticket: '✈️', passport: '🛂', id_card: '🪪',
+                              hotel_voucher: '🏨', invoice: '🧾', unknown: '📄',
+                            };
+                            const labels: Record<string, string> = {
+                              flight_ticket: 'Billet d\'avion', passport: 'Passeport', id_card: 'Carte d\'identité',
+                              hotel_voucher: 'Bon hôtel', invoice: 'Facture', unknown: 'Document',
+                            };
+                            return (
+                              <div className="mx-2 mb-2 mt-1.5 rounded-lg bg-blue-50 border border-blue-100 p-2.5">
+                                <div className="flex items-center gap-1.5 mb-1.5">
+                                  <span className="text-sm">{icons[ocr.document_type] || '📄'}</span>
+                                  <span className="text-[11px] font-bold text-blue-800">{labels[ocr.document_type] || 'Document'} détecté</span>
+                                  <span className={`ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                    ocr.confidence === 'high' ? 'bg-green-100 text-green-700' :
+                                    ocr.confidence === 'medium' ? 'bg-amber-100 text-amber-700' :
+                                    'bg-gray-100 text-gray-500'
+                                  }`}>{ocr.confidence === 'high' ? 'Fiable' : ocr.confidence === 'medium' ? 'Probable' : 'Incertain'}</span>
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                  {ocr.passenger_name && <p className="text-[11px] text-gray-700"><span className="text-gray-400">Passager</span> {ocr.passenger_name}</p>}
+                                  {ocr.flight_number && <p className="text-[11px] text-gray-700"><span className="text-gray-400">Vol</span> {ocr.flight_number}</p>}
+                                  {ocr.flight_date && <p className="text-[11px] text-gray-700"><span className="text-gray-400">Date</span> {new Date(ocr.flight_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>}
+                                  {(ocr.departure_airport || ocr.arrival_airport) && (
+                                    <p className="text-[11px] text-gray-700">
+                                      <span className="text-gray-400">Trajet</span>{' '}
+                                      {ocr.departure_airport || '?'} → {ocr.arrival_airport || '?'}
+                                    </p>
+                                  )}
+                                  {(ocr.departure_time || ocr.arrival_time) && (
+                                    <p className="text-[11px] text-gray-700">
+                                      <span className="text-gray-400">Horaires</span>{' '}
+                                      {ocr.departure_time || '—'} → {ocr.arrival_time || '—'}
+                                    </p>
+                                  )}
+                                  {ocr.booking_reference && <p className="text-[11px] text-gray-700"><span className="text-gray-400">Réf.</span> {ocr.booking_reference}</p>}
+                                  {ocr.seat && <p className="text-[11px] text-gray-700"><span className="text-gray-400">Siège</span> {ocr.seat}</p>}
+                                  {ocr.cabin_class && <p className="text-[11px] text-gray-700"><span className="text-gray-400">Cabine</span> {ocr.cabin_class}</p>}
+                                  {/* Passeport / CI */}
+                                  {ocr.doc_number && <p className="text-[11px] text-gray-700"><span className="text-gray-400">N° doc.</span> {ocr.doc_number}</p>}
+                                  {ocr.nationality && <p className="text-[11px] text-gray-700"><span className="text-gray-400">Nationalité</span> {ocr.nationality}</p>}
+                                  {ocr.date_of_birth && <p className="text-[11px] text-gray-700"><span className="text-gray-400">Naissance</span> {new Date(ocr.date_of_birth).toLocaleDateString('fr-FR')}</p>}
+                                  {ocr.expiry_date && <p className="text-[11px] text-gray-700"><span className="text-gray-400">Expiration</span> {new Date(ocr.expiry_date).toLocaleDateString('fr-FR')}</p>}
+                                  {ocr.summary && !ocr.passenger_name && !ocr.flight_number && !ocr.doc_number && (
+                                    <p className="text-[11px] text-gray-600 italic">{ocr.summary}</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          {msg.message_content && msg.message_content !== 'image' && (
+                            <p className="px-3 py-1.5 text-gray-700 text-sm break-words whitespace-pre-wrap">{msg.message_content}</p>
+                          )}
+                        </div>
                       ) : (
                         <p className="px-3 py-2 text-gray-900 break-words whitespace-pre-wrap leading-relaxed">{msg.message_content}</p>
                       )}
