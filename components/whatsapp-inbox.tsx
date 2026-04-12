@@ -204,6 +204,10 @@ export function WhatsAppInbox() {
   const [linkSearch, setLinkSearch] = useState('');
   const [linkSearchResults, setLinkSearchResults] = useState<NameSuggestion[]>([]);
   const [linkSearching, setLinkSearching] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<{ id: string; name: string; category: string; content: string }[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [resolvingTemplate, setResolvingTemplate] = useState(false);
   const [showMediaLib, setShowMediaLib] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<{ name: string; path: string; url: string; type: string }[]>([]);
   const [mediaFolder, setMediaFolder] = useState('');
@@ -638,6 +642,30 @@ export function WhatsAppInbox() {
       setLinkingId(null);
     }
   }, [selectedPhone, linkingId, supabase, loadClientInfo, router]);
+
+  const loadTemplates = useCallback(async () => {
+    if (templates.length > 0) { setShowTemplates(true); return; }
+    setTemplatesLoading(true);
+    const res = await fetch('/api/whatsapp/templates');
+    const data = await res.json();
+    setTemplates(data.templates ?? []);
+    setTemplatesLoading(false);
+    setShowTemplates(true);
+  }, [templates.length]);
+
+  const handleInsertTemplate = useCallback(async (templateId: string) => {
+    if (!selectedPhone) return;
+    setResolvingTemplate(true);
+    const res = await fetch('/api/whatsapp/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templateId, phone: selectedPhone }),
+    });
+    const data = await res.json();
+    if (data.content) setReplyText(data.content);
+    setShowTemplates(false);
+    setResolvingTemplate(false);
+  }, [selectedPhone]);
 
   const loadMediaLibrary = useCallback(async (folder = '') => {
     setMediaLoading(true);
@@ -1454,6 +1482,39 @@ export function WhatsAppInbox() {
                   </button>
                 </div>
               )}
+              {/* Templates panel */}
+              {showTemplates && (
+                <div className="flex-shrink-0 border-t border-gray-200 bg-white">
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+                    <span className="text-xs font-semibold text-gray-600">Templates de message</span>
+                    <button onClick={() => setShowTemplates(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                  </div>
+                  <div className="p-3 max-h-52 overflow-y-auto">
+                    {templatesLoading || resolvingTemplate ? (
+                      <div className="flex items-center justify-center h-16 gap-2 text-gray-400">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-xs">{resolvingTemplate ? 'Remplissage des variables...' : 'Chargement...'}</span>
+                      </div>
+                    ) : templates.length === 0 ? (
+                      <p className="text-xs text-gray-400 text-center py-4">Aucun template — crée-en dans Réglages → Templates</p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {templates.map(t => (
+                          <button key={t.id} onClick={() => handleInsertTemplate(t.id)}
+                            className="text-left px-3 py-2.5 rounded-lg border border-gray-100 hover:border-teal-300 hover:bg-teal-50 transition-colors group">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-semibold text-gray-900">{t.name}</span>
+                              <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{t.category}</span>
+                            </div>
+                            <p className="text-[11px] text-gray-400 line-clamp-2">{t.content.slice(0, 100)}...</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Médiathèque panel */}
               {showMediaLib && (
                 <div className="flex-shrink-0 border-t border-gray-200 bg-white">
@@ -1535,7 +1596,15 @@ export function WhatsAppInbox() {
                   {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-5 h-5" />}
                 </button>
                 <button
-                  onClick={() => { if (!showMediaLib) loadMediaLibrary(''); setShowMediaLib(p => !p); }}
+                  onClick={() => { setShowMediaLib(false); if (!showTemplates) loadTemplates(); else setShowTemplates(false); }}
+                  disabled={sending || uploading}
+                  title="Templates"
+                  className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors shadow-sm ${showTemplates ? 'bg-orange-100 text-orange-700' : 'bg-white hover:bg-gray-100 text-gray-500'}`}
+                >
+                  <FileText className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => { setShowTemplates(false); if (!showMediaLib) loadMediaLibrary(''); setShowMediaLib(p => !p); }}
                   disabled={sending || uploading}
                   title="Médiathèque"
                   className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors shadow-sm ${showMediaLib ? 'bg-teal-100 text-teal-700' : 'bg-white hover:bg-gray-100 text-gray-500'}`}
