@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Edit, Save, X, Phone, Mail, Tag, Plane, Baby } from 'lucide-react'
+import { Edit, Save, X, Phone, Mail, Tag, Plane, Baby, MessageSquare } from 'lucide-react'
 
 interface RoomType { id: string; code: string; name: string }
 interface ReferenceFlight { id: string; airline: string; flight_number: string; flight_type: string; origin: string; destination: string; scheduled_time: string }
@@ -24,7 +24,9 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
   // — Contact —
   const [firstName, setFirstName] = useState(clientFile.primary_contact_first_name || '')
   const [lastName, setLastName] = useState(clientFile.primary_contact_last_name || '')
-  const [phone, setPhone] = useState(clientFile.primary_contact_phone || '')
+  // Ne jamais afficher un LID dans le champ téléphone
+  const rawPhone = clientFile.primary_contact_phone || ''
+  const [phone, setPhone] = useState(rawPhone.startsWith('lid:') ? '' : rawPhone)
   const [email, setEmail] = useState(clientFile.primary_contact_email || '')
 
   // — Commercial —
@@ -92,8 +94,13 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
       updateData = {
         primary_contact_first_name: firstName,
         primary_contact_last_name: lastName,
-        primary_contact_phone: phone,
+        primary_contact_phone: phone || null,
         primary_contact_email: email || null,
+      }
+      // Si l'ancien primary_contact_phone était un LID, le migrer dans whatsapp_lid
+      const oldPhone = clientFile.primary_contact_phone || ''
+      if (oldPhone.startsWith('lid:') && !clientFile.whatsapp_lid) {
+        updateData.whatsapp_lid = oldPhone
       }
     } else if (section === 'commercial') {
       const fp = parsedReduction > 0 ? finalPrice : (parseFloat(quotedPrice) || null)
@@ -227,14 +234,29 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
                 {clientFile.primary_contact_last_name || clientFile.leads?.last_name}
               </p>
             </div>
-            {(clientFile.primary_contact_phone || clientFile.leads?.phone) && (
+            {/* Téléphone — uniquement si c'est un vrai numéro (pas un LID) */}
+            {(() => {
+              const p = clientFile.primary_contact_phone || clientFile.leads?.phone || ''
+              const displayPhone = p.startsWith('lid:') ? '' : p
+              return displayPhone ? (
+                <div>
+                  <p className="text-sm text-gray-500">Téléphone</p>
+                  <a href={`tel:${displayPhone}`}
+                    className="flex items-center text-turquoise-600 hover:text-turquoise-700 font-medium">
+                    <Phone className="w-4 h-4 mr-2" />
+                    {displayPhone}
+                  </a>
+                </div>
+              ) : null
+            })()}
+            {/* WhatsApp LID — identifiant stable WhatsApp */}
+            {(clientFile.whatsapp_lid || (clientFile.primary_contact_phone || '').startsWith('lid:')) && (
               <div>
-                <p className="text-sm text-gray-500">Téléphone</p>
-                <a href={`tel:${clientFile.primary_contact_phone || clientFile.leads?.phone}`}
-                  className="flex items-center text-turquoise-600 hover:text-turquoise-700 font-medium">
-                  <Phone className="w-4 h-4 mr-2" />
-                  {clientFile.primary_contact_phone || clientFile.leads?.phone}
-                </a>
+                <p className="text-sm text-gray-500">WhatsApp ID</p>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-lg text-xs font-mono text-green-800">
+                  <MessageSquare className="w-3.5 h-3.5 text-green-600" />
+                  {clientFile.whatsapp_lid || clientFile.primary_contact_phone}
+                </span>
               </div>
             )}
             {(clientFile.primary_contact_email || clientFile.leads?.email) && (

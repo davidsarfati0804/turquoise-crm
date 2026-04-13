@@ -46,7 +46,7 @@ export async function POST(
     // ── Récupérer le BI ───────────────────────────────────────────────────────
     const { data: bi, error: biError } = await supabase
       .from('bulletin_inscriptions')
-      .select(`*, client_files ( id, primary_contact_phone )`)
+      .select(`*, client_files ( id, primary_contact_phone, whatsapp_lid )`)
       .eq('id', id)
       .maybeSingle()
 
@@ -60,13 +60,15 @@ export async function POST(
     const eventName  = biData?.event?.name        || 'Evenement'
     const clientFileId = (bi as any).client_files?.id
 
-    // Téléphone : ignorer les LID WhatsApp, utiliser uniquement un vrai numéro
+    // Priorité d'envoi WhatsApp : whatsapp_lid > primary_contact_phone > biData phone
+    const waLid    = (bi as any).client_files?.whatsapp_lid || ''
     const rawPhone = (bi as any).client_files?.primary_contact_phone || biData?.client?.phone || ''
-    const phone    = rawPhone.startsWith('lid:') ? biData?.client?.phone || '' : rawPhone
+    // phone = LID si disponible, sinon vrai numéro (jamais un LID depuis primary_contact_phone)
+    const phone = waLid || (rawPhone.startsWith('lid:') ? '' : rawPhone)
 
-    if (!phone || phone.startsWith('lid:')) {
+    if (!phone) {
       return NextResponse.json({
-        error: 'Numéro de téléphone réel introuvable. Corrige le numéro dans le dossier (actuellement un LID WhatsApp).',
+        error: 'Aucun identifiant WhatsApp trouvé. Ajoute un numéro de téléphone dans le dossier.',
       }, { status: 400 })
     }
 

@@ -62,7 +62,8 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef   = useRef<HTMLInputElement>(null)
 
-  const phoneNumber     = clientFile?.primary_contact_phone
+  // Priorité : whatsapp_lid (identifiant stable WA) > primary_contact_phone
+  const phoneNumber     = clientFile?.whatsapp_lid || clientFile?.primary_contact_phone
   const normalizedPhone = phoneNumber ? normalizePhone(phoneNumber) : null
 
   // ── State messages ──────────────────────────────────────────────────────────

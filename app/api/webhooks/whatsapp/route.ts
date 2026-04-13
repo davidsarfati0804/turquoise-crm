@@ -117,10 +117,15 @@ async function createLeadFromMessage(
   const firstName = nameParts[0];
   const lastName = nameParts.slice(1).join(' ') || nameParts[0];
 
+  // Si l'identifiant est un LID, ne jamais le mettre dans phone.
+  // Le stocker dans whatsapp_lid et laisser phone vide.
+  const isLid = phoneNumber.startsWith('lid:');
+
   const { data, error } = await supabase
     .from('leads')
     .insert({
-      phone: phoneNumber,
+      phone: isLid ? '' : phoneNumber,
+      ...(isLid ? { whatsapp_lid: phoneNumber } : {}),
       first_name: firstName,
       last_name: lastName,
       source: 'whatsapp',
