@@ -12,13 +12,26 @@ interface ParticipantInput {
   last_name?: string;
   date_of_birth?: string;
   participant_type: 'adult' | 'child' | 'baby';
-  gender?: 'M' | 'F';
+  gender?: string;
+}
+
+/** Extract a flight number like "MK015" or "MK028" from a free-text string */
+function extractFlightNumber(text: string): string | null {
+  const match = text.match(/\b([A-Z]{2}\d{3,4})\b/i);
+  return match ? match[1].toUpperCase() : null;
 }
 
 /**
  * POST /api/whatsapp/apply-dossier-extraction
  * Applies validated AI-extracted fields to a client_file (dossier).
  * Creates real participant records from extracted participant data.
+ *
+ * Real column names on client_files:
+ *   arrival_date   → sejour_start_date
+ *   departure_date → sejour_end_date
+ *   flight_inbound → flight_id_inbound (UUID lookup in reference_flights)
+ *   flight_outbound → flight_id_outbound (UUID lookup in reference_flights)
+ *   nb_chambres    → does NOT exist, ignored
  */
 export async function POST(req: NextRequest) {
   const authClient = await createClient();
@@ -39,36 +52,68 @@ export async function POST(req: NextRequest) {
   const { dossierId, fields, participants } = body;
   if (!dossierId) return NextResponse.json({ error: 'dossierId requis' }, { status: 400 });
 
-  // Build update object for client_files
+  // Build update object — only real columns on client_files
   const update: Record<string, unknown> = {};
 
   if (fields.first_name) update.primary_contact_first_name = fields.first_name;
-  if (fields.last_name) update.primary_contact_last_name = fields.last_name;
-  if (fields.adults_count != null) update.adults_count = fields.adults_count;
+  if (fields.last_name)  update.primary_contact_last_name  = fields.last_name;
+  if (fields.adults_count   != null) update.adults_count   = fields.adults_count;
   if (fields.children_count != null) update.children_count = fields.children_count;
-  if (fields.babies_count != null) update.babies_count = fields.babies_count;
-  if (fields.arrival_date) update.arrival_date = fields.arrival_date;
-  if (fields.departure_date) update.departure_date = fields.departure_date;
+  if (fields.babies_count   != null) update.babies_count   = fields.babies_count;
+  // arrival_date / departure_date → sejour_start_date / sejour_end_date
+  if (fields.arrival_date)   update.sejour_start_date = fields.arrival_date;
+  if (fields.departure_date) update.sejour_end_date   = fields.departure_date;
+  // room type FK
   if (fields.room_type_id) update.selected_room_type_id = fields.room_type_id;
-  if (fields.nb_chambres != null) update.nb_chambres = fields.nb_chambres;
-  if (fields.quoted_price != null || fields.budget != null) update.quoted_price = fields.quoted_price ?? fields.budget;
+  // budget / quoted price
+  if (fields.quoted_price != null || fields.budget != null)
+    update.quoted_price = fields.quoted_price ?? fields.budget;
+  // event FK
   if (fields.event_id) update.event_id = fields.event_id;
-  // Note: flight_inbound / flight_outbound are text descriptions — FK lookup would be needed to set flight_id_inbound/outbound
+  // nb_chambres → column doesn't exist, skip
+
+  // Flights: look up UUID in reference_flights by flight number
+  if (fields.flight_inbound) {
+    const flightNum = extractFlightNumber(String(fields.flight_inbound));
+    if (flightNum) {
+      const { data: flight } = await supabase
+        .from('reference_flights')
+        .select('id')
+        .ilike('flight_number', flightNum)
+        .maybeSingle();
+      if (flight?.id) update.flight_id_inbound = flight.id;
+    }
+  }
+  if (fields.flight_outbound) {
+    const flightNum = extractFlightNumber(String(fields.flight_outbound));
+    if (flightNum) {
+      const { data: flight } = await supabase
+        .from('reference_flights')
+        .select('id')
+        .ilike('flight_number', flightNum)
+        .maybeSingle();
+      if (flight?.id) update.flight_id_outbound = flight.id;
+    }
+  }
+
+  const fieldErrors: string[] = [];
 
   if (Object.keys(update).length > 0) {
     const { error } = await supabase
       .from('client_files')
       .update(update)
       .eq('id', dossierId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error('[apply-dossier-extraction] client_files update error:', error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
   }
 
-  // Create participant records from extracted participant data
+  // Participants
   const participantsCreated: number[] = [];
   const participantErrors: string[] = [];
 
   if (participants && participants.length > 0) {
-    // Fetch dossier last name as fallback
     const { data: dos } = await supabase
       .from('client_files')
       .select('primary_contact_last_name')
@@ -77,10 +122,9 @@ export async function POST(req: NextRequest) {
     const fallbackLastName = (dos as any)?.primary_contact_last_name || '';
 
     for (const p of participants) {
-      // Map gender: 'M'/'F' → 'male'/'female' (DB constraint)
-      let gender: string | null = null;
       const g = p.gender as string | undefined;
-      if (g === 'M' || g === 'male') gender = 'male';
+      let gender: string | null = null;
+      if (g === 'M' || g === 'male')    gender = 'male';
       else if (g === 'F' || g === 'female') gender = 'female';
 
       const { error: partError } = await supabase.from('participants').insert({
@@ -104,6 +148,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     appliedFields: Object.keys(update),
+    fieldErrors: fieldErrors.length > 0 ? fieldErrors : undefined,
     participantsCreated: participantsCreated.length,
     participantErrors: participantErrors.length > 0 ? participantErrors : undefined,
   });

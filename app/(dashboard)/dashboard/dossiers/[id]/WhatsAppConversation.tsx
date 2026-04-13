@@ -532,11 +532,12 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
                     if (key === 'participants') return null
                     const label: Record<string, string> = {
                       first_name: 'Prénom', last_name: 'Nom',
-                      arrival_date: 'Date arrivée', departure_date: 'Date départ',
+                      arrival_date: 'Date début séjour', departure_date: 'Date fin séjour',
                       adults_count: 'Adultes', children_count: 'Enfants', babies_count: 'Bébés',
-                      flight_inbound: 'Vol arrivée', flight_outbound: 'Vol départ',
+                      flight_inbound: 'Vol arrivée (sera cherché par n° vol)',
+                      flight_outbound: 'Vol départ (sera cherché par n° vol)',
                       room_type_name: 'Chambre', room_type_id: null as unknown as string,
-                      nb_chambres: 'Nb chambres', budget: 'Budget (€)',
+                      budget: 'Budget (€)',
                       event_name: 'Événement', event_id: null as unknown as string,
                     }
                     if (!label[key]) return null
