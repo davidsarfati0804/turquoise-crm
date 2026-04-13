@@ -43,10 +43,12 @@ export function EditLeadForm({ lead }: { lead: any }) {
     setError('')
 
     const formData = new FormData(e.currentTarget)
-    const data = {
+    const newPhone = formData.get('phone') as string
+
+    const data: Record<string, unknown> = {
       first_name: formData.get('first_name') as string,
       last_name: formData.get('last_name') as string,
-      phone: formData.get('phone') as string,
+      phone: newPhone || null,
       email: (formData.get('email') as string) || null,
       event_id: (formData.get('event_id') as string) || null,
       source: formData.get('source') as string,
@@ -59,6 +61,12 @@ export function EditLeadForm({ lead }: { lead: any }) {
       flight_id_outbound: (formData.get('flight_id_outbound') as string) || null,
       flight_date_inbound: (formData.get('flight_date_inbound') as string) || null,
       flight_date_outbound: (formData.get('flight_date_outbound') as string) || null,
+    }
+
+    // Si l'ancien phone était un LID, le migrer dans whatsapp_lid avant d'écraser
+    const oldPhone = lead.phone || ''
+    if (oldPhone.startsWith('lid:') && !lead.whatsapp_lid && newPhone && !newPhone.startsWith('lid:')) {
+      data.whatsapp_lid = oldPhone
     }
 
     const supabase = createClient()
@@ -156,16 +164,25 @@ export function EditLeadForm({ lead }: { lead: any }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-            Téléphone *
+            Téléphone
           </label>
           <input
             type="tel"
             id="phone"
             name="phone"
-            required
-            defaultValue={lead.phone}
+            defaultValue={(lead.phone || '').startsWith('lid:') ? '' : (lead.phone || '')}
+            placeholder="Ex: +33612345678"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
           />
+          {/* Afficher le LID séparément s'il existe */}
+          {(lead.whatsapp_lid || (lead.phone || '').startsWith('lid:')) && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-green-700">
+              <span className="font-medium">WhatsApp ID :</span>
+              <span className="font-mono bg-green-50 border border-green-200 px-2 py-0.5 rounded">
+                {lead.whatsapp_lid || lead.phone}
+              </span>
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
