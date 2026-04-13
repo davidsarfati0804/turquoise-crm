@@ -501,8 +501,8 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
 
         {/* Panel auto-détection dossier */}
         {(detection || detectionError || applySuccess) && (
-          <div className="mb-2 rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-amber-100" style={{ backgroundColor: '#fffbeb' }}>
+          <div className="mb-2 rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden" style={{ maxHeight: '260px', display: 'flex', flexDirection: 'column' }}>
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-amber-100 flex-shrink-0" style={{ backgroundColor: '#fffbeb' }}>
               <Zap className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
               <span className="text-xs font-semibold text-amber-800 flex-1">Auto-remplissage dossier</span>
               <button onClick={() => { setDetection(null); setDetectionError(null); setDetectionSelection(new Set()) }} className="text-gray-400 hover:text-gray-600">
@@ -517,7 +517,7 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
             )}
             {detectionError && <div className="px-3 py-2 text-xs text-red-600">{detectionError}</div>}
             {detection && (
-              <div className="px-3 py-3">
+              <div className="px-3 py-3 overflow-y-auto flex-1">
                 <p className="text-[11px] font-semibold text-amber-800 mb-2">Coche les éléments à appliquer :</p>
                 <div className="flex flex-col gap-1.5">
                   {Object.entries(detection).map(([key, val]) => {
