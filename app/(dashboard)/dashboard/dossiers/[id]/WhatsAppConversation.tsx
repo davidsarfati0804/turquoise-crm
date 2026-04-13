@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   Send, Loader2, MessageSquare, Check, CheckCheck,
@@ -56,7 +57,8 @@ function DeliveryIcon({ status }: { status: string }) {
 
 // ── Composant ─────────────────────────────────────────────────────────────────
 export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
-  const supabase     = useRef(createClient()).current
+  const supabase       = useRef(createClient()).current
+  const router         = useRouter()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef   = useRef<HTMLInputElement>(null)
 
@@ -384,6 +386,7 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
       setDetection(null)
       setDetectionSelection(new Set())
       setApplySuccess(true)
+      router.refresh()
       setTimeout(() => setApplySuccess(false), 3000)
     } catch {
       setDetectionError('Erreur lors de l\'application')
