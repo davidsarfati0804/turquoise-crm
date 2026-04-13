@@ -378,18 +378,26 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
       : []
     const participants = allParticipants.filter((_, i) => detectionSelection.has(`participant_${i}`))
     try {
-      await fetch('/api/whatsapp/apply-dossier-extraction', {
+      const res = await fetch('/api/whatsapp/apply-dossier-extraction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dossierId: clientFile.id, fields, participants }),
       })
+      const result = await res.json()
+      if (!res.ok) {
+        setDetectionError(result.error || 'Erreur lors de l\'application')
+        return
+      }
+      if (result.participantErrors?.length) {
+        setDetectionError(`Certains participants n'ont pas pu être créés : ${result.participantErrors.join(', ')}`)
+      }
       setDetection(null)
       setDetectionSelection(new Set())
       setApplySuccess(true)
       router.refresh()
       setTimeout(() => setApplySuccess(false), 3000)
     } catch {
-      setDetectionError('Erreur lors de l\'application')
+      setDetectionError('Erreur de connexion')
     } finally {
       setApplying(false)
     }

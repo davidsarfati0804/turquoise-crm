@@ -64,21 +64,47 @@ export async function POST(req: NextRequest) {
   }
 
   // Create participant records from extracted participant data
-  if (participants && participants.length > 0) {
-    const participantInserts = participants.map(p => ({
-      client_file_id: dossierId,
-      first_name: p.first_name,
-      last_name: p.last_name || null,
-      date_of_birth: p.date_of_birth || null,
-      participant_type: p.participant_type,
-      gender: p.gender || null,
-    }));
+  const participantsCreated: number[] = [];
+  const participantErrors: string[] = [];
 
-    const { error: partError } = await supabase.from('participants').insert(participantInserts);
-    if (partError) {
-      console.error('[apply-dossier-extraction] participants insert error:', partError);
+  if (participants && participants.length > 0) {
+    // Fetch dossier last name as fallback
+    const { data: dos } = await supabase
+      .from('client_files')
+      .select('primary_contact_last_name')
+      .eq('id', dossierId)
+      .maybeSingle();
+    const fallbackLastName = (dos as any)?.primary_contact_last_name || '';
+
+    for (const p of participants) {
+      // Map gender: 'M'/'F' → 'male'/'female' (DB constraint)
+      let gender: string | null = null;
+      const g = p.gender as string | undefined;
+      if (g === 'M' || g === 'male') gender = 'male';
+      else if (g === 'F' || g === 'female') gender = 'female';
+
+      const { error: partError } = await supabase.from('participants').insert({
+        client_file_id: dossierId,
+        first_name: p.first_name,
+        last_name: p.last_name || fallbackLastName || '',
+        date_of_birth: p.date_of_birth || null,
+        participant_type: p.participant_type || 'adult',
+        gender,
+      });
+
+      if (partError) {
+        console.error('[apply-dossier-extraction] participant insert error:', partError.message);
+        participantErrors.push(`${p.first_name}: ${partError.message}`);
+      } else {
+        participantsCreated.push(1);
+      }
     }
   }
 
-  return NextResponse.json({ ok: true, appliedFields: Object.keys(update), participantsCreated: participants?.length ?? 0 });
+  return NextResponse.json({
+    ok: true,
+    appliedFields: Object.keys(update),
+    participantsCreated: participantsCreated.length,
+    participantErrors: participantErrors.length > 0 ? participantErrors : undefined,
+  });
 }

@@ -774,11 +774,15 @@ export function WhatsAppInbox() {
     const participants = allParticipants.filter((_, i) => dossierFieldSelection.has(`participant_${i}`));
 
     try {
-      await fetch('/api/whatsapp/apply-dossier-extraction', {
+      const res = await fetch('/api/whatsapp/apply-dossier-extraction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dossierId, fields: selected, participants }),
       });
+      const result = await res.json();
+      if (result.participantErrors?.length) {
+        console.error('[apply] participant errors:', result.participantErrors);
+      }
       setDossierExtraction(null);
       setDossierFieldSelection(new Set());
       await loadClientInfo(selectedPhone!);
