@@ -8,6 +8,14 @@ const supabase = createServiceClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
+export interface ExtractedParticipant {
+  first_name: string;
+  last_name?: string;
+  date_of_birth?: string;   // YYYY-MM-DD
+  participant_type: 'adult' | 'child' | 'baby';
+  gender?: 'M' | 'F';
+}
+
 export interface ExtractedDossierInfo {
   // Client
   first_name?: string;
@@ -19,7 +27,6 @@ export interface ExtractedDossierInfo {
   adults_count?: number;
   children_count?: number;
   babies_count?: number;
-  children_ages?: number[];    // âges des enfants en années
   // Vols
   flight_inbound?: string;     // ex: "MRU → CDG MK0027 12 Feb"
   flight_outbound?: string;    // ex: "CDG → MRU MK0028 5 Feb"
@@ -28,8 +35,8 @@ export interface ExtractedDossierInfo {
   nb_chambres?: number;
   // Financier
   budget?: number;
-  // Notes libres
-  notes?: string;
+  // Participants
+  participants?: ExtractedParticipant[];
 }
 
 /**
@@ -120,7 +127,6 @@ Extrait TOUTES les informations du dossier mentionnées dans la conversation. Re
   "adults_count": null,
   "children_count": null,
   "babies_count": null,
-  "children_ages": null,
   "flight_inbound": null,
   "flight_outbound": null,
   "room_type_name": null,
@@ -129,23 +135,26 @@ Extrait TOUTES les informations du dossier mentionnées dans la conversation. Re
   "budget": null,
   "event_name": null,
   "event_id": null,
-  "notes": null
+  "participants": null
 }
 
 Règles:
 - dates: format YYYY-MM-DD uniquement
-- children_ages: tableau d'entiers (âge en années), null si pas mentionné
 - flight_inbound: sens ARRIVEE (vol qui arrive à destination), ex: "CDG→MRU MK028 le 15 jan"
 - flight_outbound: sens DEPART (vol qui part de destination), ex: "MRU→CDG MK029 le 22 jan"
 - budget: nombre entier en euros, null si pas mentionné
-- notes: infos utiles non capturées ailleurs
+- participants: tableau d'objets pour CHAQUE personne nommée dans la conversation (adultes ET enfants ET bébés). Chaque objet:
+  { "first_name": "Prénom", "last_name": "Nom" (optionnel), "date_of_birth": "YYYY-MM-DD" (si mentionné), "participant_type": "adult"|"child"|"baby", "gender": "M"|"F" (si connu) }
+  baby = moins de 2 ans, child = 2-17 ans, adult = 18 ans et plus
+  null si aucune personne nommée
+- NE PAS mettre d'informations dans un champ "notes" — TOUT doit être classifié dans les champs appropriés
 - null pour tout champ non mentionné dans la conversation`;
 
   try {
     const response = await Promise.race([
       anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 500,
+        max_tokens: 800,
         system: 'Tu es un assistant qui extrait des informations de dossiers de voyage depuis des conversations WhatsApp. Retourne UNIQUEMENT du JSON valide, rien d\'autre.',
         messages: [{ role: 'user', content: prompt }],
       }),

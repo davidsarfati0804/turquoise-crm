@@ -765,18 +765,19 @@ export function WhatsAppInbox() {
   const handleApplyDossierExtraction = useCallback(async (dossierId: string) => {
     if (!dossierExtraction || applyingDossier) return;
     setApplyingDossier(true);
+    // Scalar fields (exclude participants and hidden id fields)
     const selected = Object.fromEntries(
-      Object.entries(dossierExtraction).filter(([k]) => dossierFieldSelection.has(k))
+      Object.entries(dossierExtraction).filter(([k]) => dossierFieldSelection.has(k) && k !== 'participants')
     );
-    const childrenAges = dossierFieldSelection.has('children_ages') && Array.isArray(dossierExtraction.children_ages)
-      ? dossierExtraction.children_ages as number[]
-      : undefined;
+    // Participants: only include those individually checked (by index key "participant_N")
+    const allParticipants = Array.isArray(dossierExtraction.participants) ? dossierExtraction.participants as Record<string, unknown>[] : [];
+    const participants = allParticipants.filter((_, i) => dossierFieldSelection.has(`participant_${i}`));
 
     try {
       await fetch('/api/whatsapp/apply-dossier-extraction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dossierId, fields: selected, childrenAges }),
+        body: JSON.stringify({ dossierId, fields: selected, participants }),
       });
       setDossierExtraction(null);
       setDossierFieldSelection(new Set());
@@ -1427,20 +1428,20 @@ export function WhatsAppInbox() {
                             <p className="text-[11px] font-semibold text-teal-800 mb-2">Infos détectées — coche ce que tu veux appliquer :</p>
                             <div className="flex flex-col gap-1.5">
                               {Object.entries(dossierExtraction).map(([key, val]) => {
+                                // Skip participants (handled separately below) and hidden id fields
+                                if (key === 'participants') return null;
                                 const label: Record<string, string> = {
                                   first_name: 'Prénom', last_name: 'Nom',
                                   arrival_date: 'Date arrivée', departure_date: 'Date départ',
                                   adults_count: 'Adultes', children_count: 'Enfants', babies_count: 'Bébés',
-                                  children_ages: 'Âges enfants', flight_inbound: 'Vol arrivée',
-                                  flight_outbound: 'Vol départ', room_type_name: 'Chambre',
-                                  room_type_id: null as unknown as string,
+                                  flight_inbound: 'Vol arrivée', flight_outbound: 'Vol départ',
+                                  room_type_name: 'Chambre', room_type_id: null as unknown as string,
                                   nb_chambres: 'Nb chambres', budget: 'Budget (€)',
                                   event_name: 'Événement', event_id: null as unknown as string,
-                                  notes: 'Notes',
                                 };
                                 if (!label[key]) return null; // skip hidden keys (ids)
                                 const isChecked = dossierFieldSelection.has(key);
-                                const displayVal = Array.isArray(val) ? val.join(', ') + ' ans' : String(val);
+                                const displayVal = Array.isArray(val) ? val.join(', ') : String(val);
                                 return (
                                   <label key={key} className="flex items-start gap-2 cursor-pointer group">
                                     <input
@@ -1451,7 +1452,6 @@ export function WhatsAppInbox() {
                                           const n = new Set(prev);
                                           if (e.target.checked) {
                                             n.add(key);
-                                            // if checking room_type_name, also check room_type_id
                                             if (key === 'room_type_name' && dossierExtraction.room_type_id) n.add('room_type_id');
                                             if (key === 'event_name' && dossierExtraction.event_id) n.add('event_id');
                                           } else {
@@ -1472,6 +1472,44 @@ export function WhatsAppInbox() {
                                 );
                               })}
                             </div>
+
+                            {/* Participants section */}
+                            {Array.isArray(dossierExtraction.participants) && dossierExtraction.participants.length > 0 && (
+                              <div className="mt-3">
+                                <p className="text-[11px] font-semibold text-teal-800 mb-1.5">Participants détectés :</p>
+                                <div className="flex flex-col gap-1.5">
+                                  {(dossierExtraction.participants as Record<string, unknown>[]).map((p, i) => {
+                                    const pKey = `participant_${i}`;
+                                    const isChecked = dossierFieldSelection.has(pKey);
+                                    const typeLabel = p.participant_type === 'adult' ? 'Adulte' : p.participant_type === 'baby' ? 'Bébé' : 'Enfant';
+                                    const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+                                    const dob = p.date_of_birth ? ` · ${p.date_of_birth}` : '';
+                                    return (
+                                      <label key={pKey} className="flex items-start gap-2 cursor-pointer group">
+                                        <input
+                                          type="checkbox"
+                                          checked={isChecked}
+                                          onChange={e => {
+                                            setDossierFieldSelection(prev => {
+                                              const n = new Set(prev);
+                                              if (e.target.checked) n.add(pKey);
+                                              else n.delete(pKey);
+                                              return n;
+                                            });
+                                          }}
+                                          className="mt-0.5 accent-teal-600 flex-shrink-0"
+                                        />
+                                        <div className="min-w-0">
+                                          <span className="text-[10px] text-teal-700 font-medium">{typeLabel}</span>
+                                          <p className="text-xs text-gray-800 break-words leading-tight">{name}{dob}</p>
+                                        </div>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
                             <button
                               onClick={() => handleApplyDossierExtraction(dos.id)}
                               disabled={applyingDossier || dossierFieldSelection.size === 0}
@@ -1479,7 +1517,7 @@ export function WhatsAppInbox() {
                               style={{ backgroundColor: WA_DARK }}
                             >
                               {applyingDossier ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                              Appliquer {dossierFieldSelection.size > 0 ? `(${dossierFieldSelection.size} champs)` : ''}
+                              Appliquer {dossierFieldSelection.size > 0 ? `(${dossierFieldSelection.size} éléments)` : ''}
                             </button>
                           </div>
                         )}

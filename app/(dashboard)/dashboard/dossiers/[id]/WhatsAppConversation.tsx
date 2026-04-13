@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   Send, Loader2, MessageSquare, Check, CheckCheck,
   Paperclip, X, Image as ImageIcon, FileText, Video,
-  Sparkles, RefreshCw,
+  Sparkles, RefreshCw, Zap,
 } from 'lucide-react'
 
 // ── Constantes visuelles WhatsApp (identiques à l'inbox) ──────────────────────
@@ -86,10 +86,18 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
   const [mediaLoading,  setMediaLoading]  = useState(false)
   const [sendingMedia,  setSendingMedia]  = useState<string | null>(null)
 
-  // ── State IA ────────────────────────────────────────────────────────────────
+  // ── State IA suggestion ──────────────────────────────────────────────────────
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
   const [aiLoading,    setAiLoading]    = useState(false)
   const [aiError,      setAiError]      = useState<string | null>(null)
+
+  // ── State auto-détection dossier ─────────────────────────────────────────────
+  const [detection,          setDetection]          = useState<Record<string, unknown> | null>(null)
+  const [detecting,          setDetecting]          = useState(false)
+  const [detectionError,     setDetectionError]     = useState<string | null>(null)
+  const [detectionSelection, setDetectionSelection] = useState<Set<string>>(new Set())
+  const [applying,           setApplying]           = useState(false)
+  const [applySuccess,       setApplySuccess]       = useState(false)
 
   // ── Scroll to bottom ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -319,6 +327,71 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
     }
   }, [normalizedPhone, messages])
 
+  // ── Auto-détection dossier ───────────────────────────────────────────────────
+  const handleDetect = useCallback(async () => {
+    if (!normalizedPhone || detecting) return
+    setDetecting(true)
+    setDetection(null)
+    setDetectionError(null)
+    setDetectionSelection(new Set())
+    setApplySuccess(false)
+    try {
+      const res = await fetch('/api/whatsapp/extract-dossier', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalizedPhone, dossierId: clientFile?.id }),
+      })
+      const data = await res.json()
+      if (data.error) { setDetectionError(data.error); return }
+      if (Object.keys(data.extracted ?? {}).length === 0) {
+        setDetectionError('Aucune information détectée dans la conversation')
+        return
+      }
+      setDetection(data.extracted)
+      // Pre-select all fields
+      const allKeys = new Set<string>()
+      Object.entries(data.extracted).forEach(([k, v]) => {
+        if (k === 'participants' && Array.isArray(v)) {
+          (v as unknown[]).forEach((_, i) => allKeys.add(`participant_${i}`))
+        } else if (k !== 'room_type_id' && k !== 'event_id') {
+          allKeys.add(k)
+        }
+      })
+      setDetectionSelection(allKeys)
+    } catch {
+      setDetectionError('Erreur de connexion')
+    } finally {
+      setDetecting(false)
+    }
+  }, [normalizedPhone, detecting, clientFile?.id])
+
+  const handleApply = useCallback(async () => {
+    if (!detection || applying || !clientFile?.id) return
+    setApplying(true)
+    const fields = Object.fromEntries(
+      Object.entries(detection).filter(([k]) => detectionSelection.has(k) && k !== 'participants')
+    )
+    const allParticipants = Array.isArray(detection.participants)
+      ? detection.participants as Record<string, unknown>[]
+      : []
+    const participants = allParticipants.filter((_, i) => detectionSelection.has(`participant_${i}`))
+    try {
+      await fetch('/api/whatsapp/apply-dossier-extraction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dossierId: clientFile.id, fields, participants }),
+      })
+      setDetection(null)
+      setDetectionSelection(new Set())
+      setApplySuccess(true)
+      setTimeout(() => setApplySuccess(false), 3000)
+    } catch {
+      setDetectionError('Erreur lors de l\'application')
+    } finally {
+      setApplying(false)
+    }
+  }, [detection, applying, clientFile?.id, detectionSelection])
+
   // ── Pas de téléphone ─────────────────────────────────────────────────────────
   if (!phoneNumber) {
     return (
@@ -351,6 +424,18 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
         <span className="text-xs font-medium px-2 py-1 rounded-full bg-white/10 text-white/80">
           {messages.length} msg
         </span>
+        {/* Bouton auto-détection */}
+        <button
+          onClick={() => detection ? (setDetection(null), setDetectionSelection(new Set())) : handleDetect()}
+          disabled={detecting}
+          title={detection ? 'Fermer la détection' : 'Détecter les infos du dossier'}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
+            detection ? 'bg-amber-400 text-amber-900' : 'bg-white/15 hover:bg-white/25 text-white'
+          }`}
+        >
+          {detecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+          {detecting ? 'Détection…' : detection ? 'Fermer' : 'Auto-fill'}
+        </button>
       </div>
 
       {/* Messages */}
@@ -410,6 +495,123 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
 
       {/* Zone de saisie */}
       <div className="flex-shrink-0 px-3 py-2" style={{ backgroundColor: '#F0F2F5' }}>
+
+        {/* Panel auto-détection dossier */}
+        {(detection || detectionError || applySuccess) && (
+          <div className="mb-2 rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-amber-100" style={{ backgroundColor: '#fffbeb' }}>
+              <Zap className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+              <span className="text-xs font-semibold text-amber-800 flex-1">Auto-remplissage dossier</span>
+              <button onClick={() => { setDetection(null); setDetectionError(null); setDetectionSelection(new Set()) }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {applySuccess && (
+              <div className="px-3 py-2 flex items-center gap-2 text-xs text-green-700">
+                <Check className="w-3.5 h-3.5 text-green-500" />
+                Dossier mis à jour avec succès !
+              </div>
+            )}
+            {detectionError && <div className="px-3 py-2 text-xs text-red-600">{detectionError}</div>}
+            {detection && (
+              <div className="px-3 py-3">
+                <p className="text-[11px] font-semibold text-amber-800 mb-2">Coche les éléments à appliquer :</p>
+                <div className="flex flex-col gap-1.5">
+                  {Object.entries(detection).map(([key, val]) => {
+                    if (key === 'participants') return null
+                    const label: Record<string, string> = {
+                      first_name: 'Prénom', last_name: 'Nom',
+                      arrival_date: 'Date arrivée', departure_date: 'Date départ',
+                      adults_count: 'Adultes', children_count: 'Enfants', babies_count: 'Bébés',
+                      flight_inbound: 'Vol arrivée', flight_outbound: 'Vol départ',
+                      room_type_name: 'Chambre', room_type_id: null as unknown as string,
+                      nb_chambres: 'Nb chambres', budget: 'Budget (€)',
+                      event_name: 'Événement', event_id: null as unknown as string,
+                    }
+                    if (!label[key]) return null
+                    const isChecked = detectionSelection.has(key)
+                    const displayVal = Array.isArray(val) ? val.join(', ') : String(val)
+                    return (
+                      <label key={key} className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={e => {
+                            setDetectionSelection(prev => {
+                              const n = new Set(prev)
+                              if (e.target.checked) {
+                                n.add(key)
+                                if (key === 'room_type_name' && detection.room_type_id) n.add('room_type_id')
+                                if (key === 'event_name' && detection.event_id) n.add('event_id')
+                              } else {
+                                n.delete(key)
+                                if (key === 'room_type_name') n.delete('room_type_id')
+                                if (key === 'event_name') n.delete('event_id')
+                              }
+                              return n
+                            })
+                          }}
+                          className="mt-0.5 accent-amber-600 flex-shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <span className="text-[10px] text-amber-700 font-medium">{label[key]}</span>
+                          <p className="text-xs text-gray-800 break-words leading-tight">{displayVal}</p>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+
+                {/* Participants */}
+                {Array.isArray(detection.participants) && detection.participants.length > 0 && (
+                  <div className="mt-2.5">
+                    <p className="text-[11px] font-semibold text-amber-800 mb-1.5">Participants :</p>
+                    <div className="flex flex-col gap-1.5">
+                      {(detection.participants as Record<string, unknown>[]).map((p, i) => {
+                        const pKey = `participant_${i}`
+                        const isChecked = detectionSelection.has(pKey)
+                        const typeLabel = p.participant_type === 'adult' ? 'Adulte' : p.participant_type === 'baby' ? 'Bébé' : 'Enfant'
+                        const name = [p.first_name, p.last_name].filter(Boolean).join(' ')
+                        const dob = p.date_of_birth ? ` · ${p.date_of_birth}` : ''
+                        return (
+                          <label key={pKey} className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                setDetectionSelection(prev => {
+                                  const n = new Set(prev)
+                                  if (e.target.checked) n.add(pKey)
+                                  else n.delete(pKey)
+                                  return n
+                                })
+                              }}
+                              className="mt-0.5 accent-amber-600 flex-shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <span className="text-[10px] text-amber-700 font-medium">{typeLabel}</span>
+                              <p className="text-xs text-gray-800 break-words leading-tight">{name}{dob}</p>
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleApply}
+                  disabled={applying || detectionSelection.size === 0}
+                  className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-50"
+                  style={{ backgroundColor: '#d97706' }}
+                >
+                  {applying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Appliquer au dossier {detectionSelection.size > 0 ? `(${detectionSelection.size} éléments)` : ''}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Panel IA */}
         {(aiSuggestion || aiLoading || aiError) && (
