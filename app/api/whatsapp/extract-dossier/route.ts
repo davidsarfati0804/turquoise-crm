@@ -117,19 +117,10 @@ export async function POST(req: NextRequest) {
   const eventList = (events ?? []).map(e => `- ${e.name} (id: ${e.id}${e.start_date ? `, début: ${e.start_date}` : ''})`).join('\n');
   const roomList = (roomTypes ?? []).map(r => `- ${r.name} (id: ${r.id})`).join('\n');
 
-  const prompt = `Conversation WhatsApp entre un agent de voyage (Turquoise) et un client:
+  // When specific messages are selected, only analyze those messages — no dossier context injection
+  const isSelectionMode = messageIds && messageIds.length > 0;
 
-${convText}
-${dossierContext}
-
-Événements disponibles:
-${eventList || 'Aucun'}
-
-Types de chambres disponibles:
-${roomList || 'Aucun'}
-
-Extrait TOUTES les informations du dossier mentionnées dans la conversation. Retourne UNIQUEMENT du JSON valide:
-{
+  const jsonSchema = `{
   "first_name": null,
   "last_name": null,
   "arrival_date": null,
@@ -158,7 +149,34 @@ Règles:
   baby = moins de 2 ans, child = 2-17 ans, adult = 18 ans et plus
   null si aucune personne nommée
 - NE PAS mettre d'informations dans un champ "notes" — TOUT doit être classifié dans les champs appropriés
-- null pour tout champ non mentionné dans la conversation`;
+- null pour tout champ non mentionné dans le message`;
+
+  const prompt = isSelectionMode
+    ? `Analyse UNIQUEMENT le ou les messages WhatsApp suivants et extrait les nouvelles informations qu'ils contiennent. Ne te base QUE sur le texte de ces messages, rien d'autre.
+
+${convText}
+
+Événements disponibles:
+${eventList || 'Aucun'}
+
+Types de chambres disponibles:
+${roomList || 'Aucun'}
+
+Retourne UNIQUEMENT du JSON valide:
+${jsonSchema}`
+    : `Conversation WhatsApp entre un agent de voyage (Turquoise) et un client:
+
+${convText}
+${dossierContext}
+
+Événements disponibles:
+${eventList || 'Aucun'}
+
+Types de chambres disponibles:
+${roomList || 'Aucun'}
+
+Extrait TOUTES les informations du dossier mentionnées dans la conversation. Retourne UNIQUEMENT du JSON valide:
+${jsonSchema}`;
 
   try {
     const response = await Promise.race([
