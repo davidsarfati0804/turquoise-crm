@@ -70,9 +70,11 @@ export async function POST(req: NextRequest) {
     .from('client_files')
     .select(`
       *,
+      selected_room_type:selected_room_type_id ( id, code, name, surface_m2 ),
       events (
         id, name, arrival_date, departure_date, ceremony_date,
         event_room_pricing (
+          room_type_id,
           price_per_night,
           room_types ( code, name, surface_m2 )
         )
@@ -131,17 +133,29 @@ export async function POST(req: NextRequest) {
     content = content.replace(/{{mois_sejour}}/g, '[mois à préciser]');
   }
 
-  // Résoudre {{prix_nuit}} — prix de la chambre sélectionnée du dossier
-  const selectedPricing = pricing.find((p: any) => p.room_types?.code === (cf as any)?.selected_room_type?.code) ?? pricing[0];
+  // Trouver la ligne de tarification correspondant à la chambre sélectionnée du dossier
+  const selectedRoomTypeId = (cf as any)?.selected_room_type_id;
+  const selectedPricing = pricing.find((p: any) => p.room_type_id === selectedRoomTypeId) ?? pricing[0];
+
+  // Chambre sélectionnée — priorité sur l'objet direct du dossier, sinon via pricing
+  const directRoom = (cf as any)?.selected_room_type;
+  const pricingRoom = selectedPricing?.room_types;
+
+  // Résoudre {{prix_nuit}} — prix depuis event_room_pricing
   content = content.replace(/{{prix_nuit}}/g, selectedPricing?.price_per_night ? `${selectedPricing.price_per_night}€` : '[prix à définir]');
 
   // Résoudre {{type_chambre}} — nom de la chambre sélectionnée
-  const selectedRoom = selectedPricing?.room_types;
-  content = content.replace(/{{type_chambre}}/g, selectedRoom?.name || '[chambre à définir]');
+  const roomName = directRoom?.name || pricingRoom?.name || pricingRoom?.code || '[chambre à définir]';
+  content = content.replace(/{{type_chambre}}/g, roomName);
 
-  // Résoudre {{options_chambres}} — les autres chambres comme options
-  if (pricing.length > 1) {
-    const options = pricing.slice(1).map((p: any) => {
+  // Résoudre {{surface_chambre}} — m² de la chambre sélectionnée
+  const roomSurface = directRoom?.surface_m2 ?? pricingRoom?.surface_m2;
+  content = content.replace(/{{surface_chambre}}/g, roomSurface != null ? String(roomSurface) : '[surface à définir]');
+
+  // Résoudre {{options_chambres}} — les autres chambres disponibles avec leur supplément
+  const otherPricing = pricing.filter((p: any) => p.room_type_id !== selectedRoomTypeId && p !== selectedPricing);
+  if (otherPricing.length > 0) {
+    const options = otherPricing.map((p: any) => {
       const room = p.room_types;
       const name = room?.name || room?.code || 'Option';
       const diff = selectedPricing?.price_per_night && p.price_per_night
@@ -153,10 +167,6 @@ export async function POST(req: NextRequest) {
   } else {
     content = content.replace(/{{options_chambres}}/g, '');
   }
-
-  // Résoudre {{surface_chambre}} — m² de la chambre sélectionnée
-  const selectedRoomType = selectedPricing?.room_types;
-  content = content.replace(/{{surface_chambre}}/g, selectedRoomType?.surface_m2 != null ? String(selectedRoomType.surface_m2) : '[surface à définir]');
 
   // Résoudre {{prix_total}} — montant total du dossier
   content = content.replace(/{{prix_total}}/g, cf?.quoted_price != null ? `${Number(cf.quoted_price).toLocaleString('fr-FR')}€` : '[montant à définir]');
