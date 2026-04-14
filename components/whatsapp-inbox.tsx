@@ -302,11 +302,18 @@ export function WhatsAppInbox() {
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const loadConversations = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('whatsapp_messages')
-      .select('wa_phone_number, wa_display_name, message_content, message_type, direction, created_at')
-      .order('created_at', { ascending: false })
-      .limit(1000);
+    const [{ data, error }, { data: dossiers }] = await Promise.all([
+      supabase
+        .from('whatsapp_messages')
+        .select('wa_phone_number, wa_display_name, message_content, message_type, direction, created_at')
+        .order('created_at', { ascending: false })
+        .limit(1000),
+      supabase
+        .from('client_files')
+        .select('primary_contact_phone, primary_contact_first_name, primary_contact_last_name')
+        .not('primary_contact_phone', 'is', null)
+        .limit(500),
+    ]);
 
     if (error) { console.error('loadConversations:', error); setLoading(false); return; }
 
@@ -325,12 +332,26 @@ export function WhatsAppInbox() {
           lastMessageDirection: msg.direction,
           unreadCount: 0,
         });
+      } else if (!convMap.get(phone)!.displayName && msg.wa_display_name) {
+        // Older message has a display name the latest one was missing — keep it
+        convMap.get(phone)!.displayName = msg.wa_display_name;
       }
       if (msg.direction === 'inbound') {
         const lastSeen = lastSeenMap.current[phone];
         if (!lastSeen || msg.created_at > lastSeen) {
           unreadCount.set(phone, (unreadCount.get(phone) || 0) + 1);
         }
+      }
+    }
+
+    // Enrich with dossier contact names (takes priority — stable even if wa_display_name is null)
+    for (const d of dossiers || []) {
+      if (!d.primary_contact_phone) continue;
+      const phone = normalizePhone(d.primary_contact_phone);
+      const conv = convMap.get(phone);
+      if (conv) {
+        const dosName = `${d.primary_contact_first_name || ''} ${d.primary_contact_last_name || ''}`.trim();
+        if (dosName) conv.displayName = dosName;
       }
     }
 
