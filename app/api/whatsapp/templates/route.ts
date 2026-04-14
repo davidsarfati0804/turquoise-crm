@@ -49,8 +49,8 @@ export async function GET() {
 
 /** POST /api/whatsapp/templates/resolve — résout les variables d'un template */
 export async function POST(req: NextRequest) {
-  const body = await req.json() as { templateId: string; phone: string };
-  const { templateId, phone } = body;
+  const body = await req.json() as { templateId: string; phone: string; dossierId?: string };
+  const { templateId, phone, dossierId } = body;
 
   const { data: template } = await supabase
     .from('whatsapp_templates')
@@ -62,28 +62,44 @@ export async function POST(req: NextRequest) {
 
   let content = template.content;
 
-  // Chercher un dossier lié au numéro pour remplir les variables (tous formats de téléphone)
-  const variants = phoneVariants(phone);
-  const orFilter = variants.map(v => `primary_contact_phone.eq.${v}`).join(',');
-
-  const { data: cf } = await supabase
-    .from('client_files')
-    .select(`
-      *,
-      selected_room_type:selected_room_type_id ( id, code, name, surface_m2 ),
-      events (
-        id, name, arrival_date, departure_date, ceremony_date,
-        event_room_pricing (
-          room_type_id,
-          price_per_night,
-          room_types ( code, name, surface_m2 )
-        )
+  const clientFileSelect = `
+    *,
+    selected_room_type:selected_room_type_id ( id, code, name, surface_m2 ),
+    events (
+      id, name, arrival_date, departure_date, ceremony_date,
+      event_room_pricing (
+        room_type_id,
+        price_per_night,
+        room_types ( code, name, surface_m2 )
       )
-    `)
-    .or(orFilter)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    )
+  `;
+
+  let cf: Record<string, unknown> | null = null;
+
+  // Priority 1: fetch directly by dossier ID (most reliable — avoids phone/LID mismatch)
+  if (dossierId) {
+    const { data } = await supabase
+      .from('client_files')
+      .select(clientFileSelect)
+      .eq('id', dossierId)
+      .maybeSingle();
+    cf = data as Record<string, unknown> | null;
+  }
+
+  // Priority 2: fallback to phone search (for WhatsApp inbox without dossier context)
+  if (!cf && phone) {
+    const variants = phoneVariants(phone);
+    const orFilter = variants.map(v => `primary_contact_phone.eq.${v}`).join(',');
+    const { data } = await supabase
+      .from('client_files')
+      .select(clientFileSelect)
+      .or(orFilter)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    cf = data as Record<string, unknown> | null;
+  }
 
   const event = (cf as any)?.events;
 

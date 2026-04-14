@@ -259,7 +259,9 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
     const res = await fetch('/api/whatsapp/templates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ templateId, phone: normalizedPhone }),
+      // Pass dossierId so the API can fetch the client file directly by ID
+      // instead of searching by phone (which may be a LID and not match)
+      body: JSON.stringify({ templateId, phone: normalizedPhone, dossierId: clientFile?.id }),
     })
     const data = await res.json()
     if (data.content) {
