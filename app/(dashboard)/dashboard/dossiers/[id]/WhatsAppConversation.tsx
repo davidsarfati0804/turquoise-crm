@@ -61,6 +61,7 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
   const router         = useRouter()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef   = useRef<HTMLInputElement>(null)
+  const textareaRef    = useRef<HTMLTextAreaElement>(null)
 
   // Priorité : whatsapp_lid (identifiant stable WA) > primary_contact_phone
   const phoneNumber     = clientFile?.whatsapp_lid || clientFile?.primary_contact_phone
@@ -110,6 +111,14 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Auto-resize textarea when content changes (typing or template insertion)
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+  }, [replyText])
 
   // ── Load messages ───────────────────────────────────────────────────────────
   const loadMessages = useCallback(async () => {
@@ -846,6 +855,7 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
 
           {/* Textarea */}
           <textarea
+            ref={textareaRef}
             value={replyText}
             onChange={e => { setReplyText(e.target.value); if (templateError && !/{{[\w]+}}/.test(e.target.value)) setTemplateError(null) }}
             onKeyDown={handleKeyDown}
@@ -853,7 +863,7 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
             rows={1}
             disabled={sending || uploading}
             className="flex-1 px-4 py-2.5 bg-white rounded-3xl text-sm outline-none resize-none leading-relaxed shadow-sm"
-            style={{ minHeight: '42px', maxHeight: '120px', overflowY: 'auto' }}
+            style={{ minHeight: '42px', maxHeight: '200px', overflowY: 'auto' }}
           />
 
           {/* IA */}

@@ -141,12 +141,32 @@ export async function POST(req: NextRequest) {
   const directRoom = (cf as any)?.selected_room_type;
   const pricingRoom = selectedPricing?.room_types;
 
+  // Fallback : si le nom de chambre est toujours vide, faire un lookup direct en DB
+  let resolvedRoomName = directRoom?.name || directRoom?.code || pricingRoom?.name || pricingRoom?.code;
+  if (!resolvedRoomName) {
+    const lookupId = selectedRoomTypeId || selectedPricing?.room_type_id;
+    if (lookupId) {
+      const { data: rtDirect } = await supabase.from('room_types').select('name, code').eq('id', lookupId).maybeSingle();
+      resolvedRoomName = rtDirect?.name || rtDirect?.code;
+    }
+  }
+
   // Résoudre {{prix_nuit}} — prix depuis event_room_pricing
-  content = content.replace(/{{prix_nuit}}/g, selectedPricing?.price_per_night ? `${selectedPricing.price_per_night}€` : '[prix à définir]');
+  // Si pas dans event_room_pricing, chercher dans event_room_pricing par room_type_id
+  let resolvedPrixNuit = selectedPricing?.price_per_night;
+  if (!resolvedPrixNuit && selectedRoomTypeId) {
+    const { data: pricingDirect } = await supabase
+      .from('event_room_pricing')
+      .select('price_per_night')
+      .eq('room_type_id', selectedRoomTypeId)
+      .limit(1)
+      .maybeSingle();
+    resolvedPrixNuit = pricingDirect?.price_per_night;
+  }
+  content = content.replace(/{{prix_nuit}}/g, resolvedPrixNuit ? `${resolvedPrixNuit}€` : '[prix à définir]');
 
   // Résoudre {{type_chambre}} — nom de la chambre sélectionnée
-  const roomName = directRoom?.name || pricingRoom?.name || pricingRoom?.code || '[chambre à définir]';
-  content = content.replace(/{{type_chambre}}/g, roomName);
+  content = content.replace(/{{type_chambre}}/g, resolvedRoomName || '[chambre à définir]');
 
   // Résoudre {{surface_chambre}} — m² de la chambre sélectionnée
   const roomSurface = directRoom?.surface_m2 ?? pricingRoom?.surface_m2;

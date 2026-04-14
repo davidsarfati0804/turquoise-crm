@@ -251,6 +251,7 @@ export function WhatsAppInbox() {
   const lastSeenMap = useRef<Record<string, string>>({});
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Ref to trigger progressive extraction without creating circular deps
   const progressiveExtractRef = useRef<(phone: string) => void>(() => {});
   // Singleton Supabase client — createClient() must NOT be called on every render
@@ -300,6 +301,14 @@ export function WhatsAppInbox() {
   }, []);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  // Auto-resize textarea when content changes (typing or template insertion)
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }, [replyText]);
 
   const loadConversations = useCallback(async () => {
     const [{ data, error }, { data: dossiers }] = await Promise.all([
@@ -2010,6 +2019,7 @@ export function WhatsAppInbox() {
                   <ImageIcon className="w-5 h-5" />
                 </button>
                 <textarea
+                  ref={textareaRef}
                   value={replyText}
                   onChange={e => {
                     setReplyText(e.target.value);
@@ -2020,7 +2030,7 @@ export function WhatsAppInbox() {
                   rows={1}
                   disabled={sending || uploading}
                   className="flex-1 px-4 py-2.5 bg-white rounded-3xl text-sm outline-none resize-none leading-relaxed shadow-sm"
-                  style={{ minHeight: '42px', maxHeight: '120px', overflowY: 'auto' }}
+                  style={{ minHeight: '42px', maxHeight: '200px', overflowY: 'auto' }}
                 />
                 <button
                   onClick={handleAiSuggest}
