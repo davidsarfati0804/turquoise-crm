@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createSignatureRequest } from '@/lib/services/yousign.service'
 import { prepareBalisesForGoogleDoc, generateBIFromGoogleDoc } from '@/lib/services/google-docs.service'
+import { sendWhatsAppMessage } from '@/lib/services/whatsapp.service'
+
+const serviceSupabase = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
 
 export async function POST(
   request: NextRequest,
@@ -29,14 +36,24 @@ export async function POST(
     }
 
     const biData = bi.data as any
+    const body = await request.json().catch(() => ({})) as { deliveryMode?: 'email' | 'whatsapp' }
+    const deliveryMode: 'email' | 'whatsapp' = body.deliveryMode || 'email'
 
-    // Vérifier que le client a un email
-    if (!biData.client?.email) {
+    // Email requis seulement pour livraison par email
+    if (deliveryMode === 'email' && !biData.client?.email) {
       return NextResponse.json(
         { error: 'Email client requis pour la signature électronique' },
         { status: 400 }
       )
     }
+
+    // Récupérer les infos WhatsApp du dossier si besoin
+    const { data: clientFileWa } = await serviceSupabase
+      .from('client_files')
+      .select('primary_contact_phone, whatsapp_lid')
+      .eq('id', bi.client_file_id)
+      .maybeSingle()
+    const waPhone = clientFileWa?.whatsapp_lid || clientFileWa?.primary_contact_phone || biData.client?.phone || ''
 
     // Générer le PDF du BI directement via Google Docs service
     const balises = prepareBalisesForGoogleDoc(biData)
@@ -71,10 +88,20 @@ export async function POST(
       fileName,
       signerFirstName: biData.client.first_name,
       signerLastName: biData.client.last_name,
-      signerEmail: biData.client.email,
+      signerEmail: biData.client.email || `noreply+${biData.file_reference}@clubturquoise.fr`,
       signerPhone: biData.client.phone || '',
       biNumber: biData.bi_number,
+      deliveryMode: deliveryMode === 'whatsapp' ? 'none' : 'email',
     })
+
+    // Si livraison WhatsApp : envoyer le lien de signature par WhatsApp
+    if (deliveryMode === 'whatsapp' && waPhone && signerUrl) {
+      const firstName = biData.client.first_name || 'Client'
+      const message = `Bonjour ${firstName},\n\nVoici votre lien pour signer votre Bulletin d'Inscription Club Turquoise :\n\n${signerUrl}\n\nCordialement,\nAurélia`
+      await sendWhatsAppMessage(waPhone, message).catch(err =>
+        console.error('WhatsApp signature link send error:', err)
+      )
+    }
 
     // Mettre à jour le BI en base
     await supabase

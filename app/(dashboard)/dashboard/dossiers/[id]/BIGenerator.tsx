@@ -29,6 +29,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
   const [requestingSignature, setRequestingSignature] = useState(false)
   const [signatureStatus, setSignatureStatus] = useState<string | null>(null)
   const [signerUrl, setSignerUrl] = useState<string | null>(null)
+  const [showSignatureModal, setShowSignatureModal] = useState(false)
 
   // Charger le dernier BI existant au montage
   useEffect(() => {
@@ -277,28 +278,27 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
     }
   }
 
-  const requestSignature = async () => {
+  const requestSignature = async (deliveryMode: 'email' | 'whatsapp') => {
     if (!generatedBI) return
-
     const biData = generatedBI.data
-    if (!biData.client.email) {
-      alert('❌ Email client requis pour la signature électronique')
+
+    if (deliveryMode === 'email' && !biData.client.email) {
+      alert('❌ Email client requis pour la livraison par email')
       return
     }
 
-    if (!confirm(`Envoyer le BI en signature électronique à ${biData.client.email} ?`)) return
-
+    setShowSignatureModal(false)
     setRequestingSignature(true)
     try {
       const res = await fetch(`/api/bulletin-inscriptions/${generatedBI.id}/request-signature`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deliveryMode }),
       })
 
       const result = await res.json()
 
       if (!res.ok) {
-        // Si déjà en cours, récupérer le lien existant
         if (res.status === 409 && result.signerUrl) {
           setSignatureStatus('ongoing')
           setSignerUrl(result.signerUrl)
@@ -310,7 +310,11 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
 
       setSignatureStatus('ongoing')
       setSignerUrl(result.signerUrl)
-      alert('✅ Demande de signature envoyée ! Le client peut signer via le lien.')
+      if (deliveryMode === 'email') {
+        alert(`✅ Lien de signature envoyé par email à ${biData.client.email}`)
+      } else {
+        alert('✅ Lien de signature envoyé par WhatsApp !')
+      }
     } catch (error) {
       console.error('Error requesting signature:', error)
       alert(error instanceof Error ? error.message : 'Erreur lors de la demande de signature')
@@ -483,14 +487,47 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
               {sendingEmail ? 'Envoi...' : 'Email'}
             </button>
 
-            <button
-              onClick={requestSignature}
-              disabled={requestingSignature || signatureStatus === 'signed'}
-              className="flex items-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium shadow-lg transition-all disabled:opacity-50"
-            >
-              <PenTool className="w-5 h-5" />
-              {requestingSignature ? 'Envoi...' : signatureStatus === 'ongoing' ? 'Signature en cours' : signatureStatus === 'signed' ? 'Signé ✓' : 'Signature électronique'}
-            </button>
+            {/* Bouton Yousign + modal choix email/whatsapp */}
+            <div className="relative">
+              <button
+                onClick={() => signatureStatus === 'signed' ? undefined : setShowSignatureModal(v => !v)}
+                disabled={requestingSignature || signatureStatus === 'signed'}
+                className="flex items-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium shadow-lg transition-all disabled:opacity-50"
+              >
+                <PenTool className="w-5 h-5" />
+                {requestingSignature ? 'Envoi...' : signatureStatus === 'ongoing' ? 'Signature en cours' : signatureStatus === 'signed' ? 'Signé ✓' : 'Signature Yousign'}
+              </button>
+              {showSignatureModal && (
+                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden w-64">
+                  <div className="px-4 py-2.5 border-b bg-amber-50">
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Envoyer le lien de signature</p>
+                  </div>
+                  <button
+                    onClick={() => requestSignature('email')}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <Mail className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-gray-900">Par email</p>
+                      <p className="text-xs text-gray-400">{generatedBI?.data?.client?.email || 'Aucun email'}</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => requestSignature('whatsapp')}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-gray-50 transition-colors border-t"
+                  >
+                    <Send className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-gray-900">Par WhatsApp</p>
+                      <p className="text-xs text-gray-400">Lien envoyé dans la conversation</p>
+                    </div>
+                  </button>
+                  <button onClick={() => setShowSignatureModal(false)} className="w-full px-4 py-2 text-xs text-gray-400 hover:text-gray-600 border-t text-center">
+                    Annuler
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Signature Status */}

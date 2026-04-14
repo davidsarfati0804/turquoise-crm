@@ -94,8 +94,24 @@ async function yousignFetch(path: string, options: RequestInit = {}) {
 }
 
 /**
+ * Detect the total number of pages in a PDF buffer.
+ * Uses the /Count entry in the PDF page tree (works for Google-Docs-generated PDFs).
+ */
+function getPdfPageCount(pdfBuffer: Buffer): number {
+  const text = pdfBuffer.toString('latin1')
+  const re = /\/Count\s+(\d+)/g
+  let match
+  let maxCount = 1
+  while ((match = re.exec(text)) !== null) {
+    const n = parseInt(match[1])
+    if (n > maxCount) maxCount = n
+  }
+  return maxCount
+}
+
+/**
  * Full signature flow with Yousign V3 API
- * 
+ *
  * 1. Create Signature Request
  * 2. Upload document (multipart) into the SR
  * 3. Add signer with signature field
@@ -109,18 +125,23 @@ export async function createSignatureRequest(params: {
   signerEmail: string
   signerPhone: string
   biNumber: string
+  deliveryMode?: 'email' | 'none'
 }): Promise<{
   signatureRequestId: string
   documentId: string
   signerUrl: string
 }> {
+  // Detect last page so signature fields land on the correct page
+  const lastPage = getPdfPageCount(params.pdfBuffer)
+  console.log(`Yousign: PDF has ${lastPage} page(s) — placing fields on page ${lastPage}`)
+
   // Step 1: Create signature request (draft)
   const signatureRequest = await yousignFetch('/signature_requests', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: `Bulletin Inscription Turquoise`,
-      delivery_mode: 'email',
+      delivery_mode: params.deliveryMode ?? 'email',
       timezone: 'Europe/Paris',
     }),
   })
@@ -172,31 +193,31 @@ export async function createSignatureRequest(params: {
       {
         document_id: documentId,
         type: 'mention',
-        page: 1,
-        x: 60,
-        y: 740,
-        width: 160,
-        height: 20,
+        page: lastPage,
+        x: 50,
+        y: 720,
+        width: 200,
+        height: 24,
         mention: 'Lu et approuvé',
       },
       {
         document_id: documentId,
         type: 'mention',
-        page: 1,
-        x: 310,
-        y: 740,
-        width: 130,
+        page: lastPage,
+        x: 330,
+        y: 710,
+        width: 140,
         height: 20,
         mention: new Date().toLocaleDateString('fr-FR'),
       },
       {
         document_id: documentId,
         type: 'signature',
-        page: 1,
-        x: 420,
-        y: 720,
-        width: 150,
-        height: 50,
+        page: lastPage,
+        x: 330,
+        y: 730,
+        width: 210,
+        height: 65,
       },
     ],
   }
