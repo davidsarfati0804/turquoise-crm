@@ -213,24 +213,21 @@ export function TransfersTab({ eventId }: { eventId: string }) {
                   <tr>
                     <th className="text-left px-4 py-2">Client</th>
                     <th className="text-left px-4 py-2">PAX</th>
-                    <th className="text-left px-4 py-2">Chambre</th>
+                    <th className="text-left px-4 py-2">Date vol</th>
                     <th className="text-left px-4 py-2">Notes transfert</th>
-                    <th className="text-left px-4 py-2">Statut</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {g.files.map(f => {
-                    const st = STATUS_LABELS[f.transfer_status] ?? STATUS_LABELS.pending
+                    const flightDate = tab === 'aller' ? f.flight_date_inbound : f.flight_date_outbound
                     return (
                       <tr key={f.id} className="hover:bg-gray-50/50">
                         <td className="px-4 py-2.5 font-medium text-gray-900">
                           {f.primary_contact_first_name} {f.primary_contact_last_name}
                         </td>
                         <td className="px-4 py-2.5 text-gray-500 text-xs">{paxLabel(f)}</td>
-                        <td className="px-4 py-2.5">
-                          {f.room_number
-                            ? <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{f.room_number}</span>
-                            : <span className="text-gray-300 text-xs">—</span>}
+                        <td className="px-4 py-2.5 text-xs text-gray-600">
+                          {flightDate ? new Date(flightDate).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' }) : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-2.5">
                           {editingNotes === f.id ? (
@@ -262,17 +259,6 @@ export function TransfersTab({ eventId }: { eventId: string }) {
                               <Edit2 className="w-3 h-3 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
                             </button>
                           )}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <select
-                            value={f.transfer_status}
-                            onChange={e => updateStatus(f.id, e.target.value)}
-                            className={`text-xs font-semibold px-2 py-1 rounded-full border-0 outline-none cursor-pointer ${st.className}`}
-                          >
-                            <option value="pending">En attente</option>
-                            <option value="confirmed">Confirmé</option>
-                            <option value="done">Fait</option>
-                          </select>
                         </td>
                       </tr>
                     )

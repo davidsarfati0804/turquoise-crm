@@ -63,6 +63,33 @@ export async function POST(req: NextRequest) {
   // arrival_date / departure_date → sejour_start_date / sejour_end_date
   if (fields.arrival_date)   update.sejour_start_date = fields.arrival_date;
   if (fields.departure_date) update.sejour_end_date   = fields.departure_date;
+
+  // When both dates change, recalculate quoted_price via event_room_pricing
+  if (fields.arrival_date && fields.departure_date && !fields.budget && !fields.quoted_price) {
+    const { data: dos } = await supabase
+      .from('client_files')
+      .select('selected_room_type_id, event_id')
+      .eq('id', dossierId)
+      .maybeSingle();
+    const roomTypeId = (dos as any)?.selected_room_type_id;
+    const eventId    = (dos as any)?.event_id;
+    if (roomTypeId && eventId) {
+      const { data: pricing } = await supabase
+        .from('event_room_pricing')
+        .select('price_per_night')
+        .eq('event_id', eventId)
+        .eq('room_type_id', roomTypeId)
+        .maybeSingle();
+      const ppn = (pricing as any)?.price_per_night;
+      if (ppn) {
+        const msNights = new Date(fields.departure_date as string).getTime() - new Date(fields.arrival_date as string).getTime();
+        const nights = Math.max(0, Math.round(msNights / 86400000));
+        if (nights > 0) {
+          update.quoted_price = Math.round(ppn * nights * 100) / 100;
+        }
+      }
+    }
+  }
   // room type FK
   if (fields.room_type_id) update.selected_room_type_id = fields.room_type_id;
   // budget / quoted price

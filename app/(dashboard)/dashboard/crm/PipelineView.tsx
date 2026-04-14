@@ -9,7 +9,7 @@ const STATUSES = [
   { id: 'inscription_en_cours', label: 'Inscription', col: 'bg-blue-50 border-blue-200', head: 'bg-blue-100' },
   { id: 'bulletin_pret', label: 'Bulletin prêt', col: 'bg-purple-50 border-purple-200', head: 'bg-purple-100' },
   { id: 'valide', label: 'Validé', col: 'bg-green-50 border-green-200', head: 'bg-green-100' },
-  { id: 'paiement_en_attente', label: 'Paiement', col: 'bg-yellow-50 border-yellow-200', head: 'bg-yellow-100' },
+  { id: 'paiement_en_attente', label: 'En cours de paiement', col: 'bg-yellow-50 border-yellow-200', head: 'bg-yellow-100' },
   { id: 'paye', label: 'Payé', col: 'bg-teal-50 border-teal-200', head: 'bg-teal-100' },
   { id: 'annule', label: 'Annulé', col: 'bg-red-50 border-red-200', head: 'bg-red-100' },
 ]
@@ -25,14 +25,17 @@ const EVENT_COLORS = [
   'bg-amber-100 text-amber-700 border-amber-200',
 ]
 
-export function PipelineView({ clientFiles }: { clientFiles: any[] }) {
+export function PipelineView({ clientFiles, events = [] }: { clientFiles: any[]; events?: { id: string; name: string }[] }) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [files, setFiles] = useState(clientFiles)
+  const [selectedEventId, setSelectedEventId] = useState<string>('all')
 
   // Index couleur par event_id
   const eventIds = [...new Set(files.map(f => f.event_id).filter(Boolean))]
   const eventColorMap: Record<string, string> = {}
   eventIds.forEach((id, i) => { eventColorMap[id] = EVENT_COLORS[i % EVENT_COLORS.length] })
+
+  const filteredFiles = selectedEventId === 'all' ? files : files.filter(f => f.event_id === selectedEventId)
 
   const handleDragStart = (e: React.DragEvent, fileId: string) => {
     setDraggingId(fileId)
@@ -58,9 +61,26 @@ export function PipelineView({ clientFiles }: { clientFiles: any[] }) {
     setDraggingId(null)
   }
 
-  const getFilesForStatus = (status: string) => files.filter(f => f.crm_status === status)
+  const getFilesForStatus = (status: string) => filteredFiles.filter(f => f.crm_status === status)
 
   return (
+    <div className="space-y-4">
+      {/* Filtre événement */}
+      {events.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500 font-medium">Filtrer par événement :</span>
+          <select
+            value={selectedEventId}
+            onChange={e => setSelectedEventId(e.target.value)}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
+          >
+            <option value="all">Tous les événements</option>
+            {events.map(ev => (
+              <option key={ev.id} value={ev.id}>{ev.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
     <div className="flex gap-3 overflow-x-auto pb-4 items-start">
       {STATUSES.map(status => {
         const statusFiles = getFilesForStatus(status.id)
@@ -121,6 +141,7 @@ export function PipelineView({ clientFiles }: { clientFiles: any[] }) {
           </div>
         )
       })}
+    </div>
     </div>
   )
 }

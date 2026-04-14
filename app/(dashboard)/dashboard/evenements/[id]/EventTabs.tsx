@@ -8,8 +8,9 @@ import { RoomsAssignmentTab } from './RoomsAssignmentTab'
 import { NannyTab } from './NannyTab'
 import { EventDashboardTab } from './EventDashboardTab'
 import { SeatingTab } from './SeatingTab'
+import { ComptaTab } from './ComptaTab'
 
-type TabType = 'crm' | 'rooms' | 'dossiers' | 'payments' | 'transfers' | 'rooms_assign' | 'nanny' | 'dashboard' | 'seating'
+type TabType = 'crm' | 'rooms' | 'dossiers' | 'payments' | 'transfers' | 'rooms_assign' | 'nanny' | 'dashboard' | 'seating' | 'compta'
 
 export function EventTabs({ event }: { event: { id: string; [key: string]: unknown } }) {
   const [activeTab, setActiveTab] = useState<TabType>('dossiers')
@@ -23,6 +24,7 @@ export function EventTabs({ event }: { event: { id: string; [key: string]: unkno
     { id: 'nanny',        label: '👶 Nanny' },
     { id: 'rooms',        label: '💶 Prix chambres' },
     { id: 'payments',     label: '💳 Paiements' },
+    { id: 'compta',       label: '📊 Compta' },
   ]
 
   return (
@@ -59,6 +61,7 @@ export function EventTabs({ event }: { event: { id: string; [key: string]: unkno
             <p className="text-gray-500">Liste des paiements et liens BRED — À venir</p>
           </div>
         )}
+        {activeTab === 'compta'       && <ComptaTab eventId={event.id} />}
       </div>
     </div>
   )

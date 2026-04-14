@@ -49,27 +49,37 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  let body: { phone?: string; dossierId?: string };
+  let body: { phone?: string; dossierId?: string; messageIds?: string[] };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { phone, dossierId } = body;
+  const { phone, dossierId, messageIds } = body;
   if (!phone) return NextResponse.json({ error: 'phone requis' }, { status: 400 });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY non configuré' }, { status: 500 });
   const anthropic = new Anthropic({ apiKey });
 
-  // Load conversation
-  const { data: msgs } = await supabase
+  // Load conversation — filtered by messageIds if provided
+  let msgsQuery = supabase
     .from('whatsapp_messages')
-    .select('direction, message_content, message_type, created_at')
+    .select('id, direction, message_content, message_type, created_at')
     .eq('wa_phone_number', phone)
     .order('created_at', { ascending: true })
     .limit(50);
+
+  if (messageIds && messageIds.length > 0) {
+    msgsQuery = supabase
+      .from('whatsapp_messages')
+      .select('id, direction, message_content, message_type, created_at')
+      .in('id', messageIds)
+      .order('created_at', { ascending: true });
+  }
+
+  const { data: msgs } = await msgsQuery;
 
   if (!msgs?.length) {
     return NextResponse.json({ extracted: {}, reason: 'Aucun message trouvé' });

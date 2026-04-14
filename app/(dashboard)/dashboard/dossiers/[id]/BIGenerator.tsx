@@ -4,6 +4,16 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Send, Mail, FileText, Eye, RefreshCw, FileDown, PenTool, CheckCircle, Clock, XCircle } from 'lucide-react'
 
+function deduplicateParticipants(participants: any[]): any[] {
+  const seen = new Set<string>()
+  return participants.filter(p => {
+    const key = `${(p.first_name || '').toLowerCase().trim()}|${(p.last_name || '').toLowerCase().trim()}|${p.date_of_birth || ''}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 interface BIGeneratorProps {
   clientFile: any
 }
@@ -117,7 +127,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
           nounou_details: event?.nounou_details,
         },
 
-        participants: participants || [],
+        participants: deduplicateParticipants(participants || []),
         total_participants: clientFile.total_participants,
         adults_count: clientFile.adults_count,
         children_count: clientFile.children_count,

@@ -53,8 +53,12 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
   const [nannyName2, setNannyName2] = useState(clientFile.nanny_name_2 || '')
   const [transferNotes, setTransferNotes] = useState(clientFile.transfer_notes || '')
 
+  // — Commercial: réduction mode —
+  const [reductionMode, setReductionMode] = useState<'euro' | 'percent'>('euro')
+
   // — Paiement —
   const [amountPaid, setAmountPaid] = useState<string>(clientFile.amount_paid?.toString() || '0')
+  const [paymentMethod, setPaymentMethod] = useState<string>(clientFile.payment_method || '')
 
   // Prix catalogue auto
   useEffect(() => {
@@ -82,8 +86,10 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
   }, [roomTypeId])
 
   const parsedQuoted = parseFloat(quotedPrice) || 0
-  const parsedReduction = parseFloat(reduction) || 0
-  const finalPrice = Math.max(0, parsedQuoted - parsedReduction)
+  const parsedReduction = reductionMode === 'percent'
+    ? Math.round((parsedQuoted * (parseFloat(reduction) || 0) / 100) * 100) / 100
+    : parseFloat(reduction) || 0
+  const finalPrice = Math.round(Math.max(0, parsedQuoted - parsedReduction) * 100) / 100
 
   const saveSection = async (section: string) => {
     setSaving(true)
@@ -138,6 +144,7 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
         amount_paid: ap,
         balance_due: Math.max(0, qp - ap),
         payment_status: ap >= qp && qp > 0 ? 'paid' : ap > 0 ? 'partial' : 'pending',
+        payment_method: paymentMethod || null,
       }
     }
 
@@ -171,6 +178,7 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
       setTransferNotes(clientFile.transfer_notes || '')
     } else if (section === 'paiement') {
       setAmountPaid(clientFile.amount_paid?.toString() || '0')
+      setPaymentMethod(clientFile.payment_method || '')
     }
     setEditingSection(null)
   }
@@ -525,10 +533,16 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 text-sm" />
               </div>
               <div>
-                <label className="text-sm text-gray-500 mb-1 flex items-center gap-1">
-                  <Tag className="w-3 h-3" /> Réduction (€)
+                <label className="text-sm text-gray-500 mb-1 flex items-center gap-2">
+                  <Tag className="w-3 h-3" /> Réduction
+                  <span className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                    <button type="button" onClick={() => setReductionMode('euro')}
+                      className={`px-2 py-0.5 font-medium transition-colors ${reductionMode === 'euro' ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>€</button>
+                    <button type="button" onClick={() => setReductionMode('percent')}
+                      className={`px-2 py-0.5 font-medium transition-colors ${reductionMode === 'percent' ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>%</button>
+                  </span>
                 </label>
-                <input type="number" step="0.01" min="0" value={reduction}
+                <input type="number" step="0.01" min="0" max={reductionMode === 'percent' ? 100 : undefined} value={reduction}
                   onChange={e => setReduction(e.target.value)} placeholder="0"
                   className="w-full px-3 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-400 text-sm" />
               </div>
@@ -537,7 +551,7 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm">
                 <p className="text-orange-700 font-medium">
                   Prix final : <span className="font-bold text-orange-800">{finalPrice.toLocaleString('fr-FR')} €</span>
-                  <span className="ml-2 text-orange-500">(-{parsedReduction.toLocaleString('fr-FR')} €)</span>
+                  <span className="ml-2 text-orange-500">(-{parsedReduction.toLocaleString('fr-FR')} €{reductionMode === 'percent' ? ` / ${reduction}%` : ''})</span>
                 </p>
               </div>
             )}
@@ -609,6 +623,17 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
                 onChange={e => setAmountPaid(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 text-sm" />
             </div>
+            <div>
+              <label className="text-sm text-gray-500 mb-1 block">Mode de paiement</label>
+              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 text-sm">
+                <option value="">-- Non renseigné --</option>
+                <option value="cb">💳 Carte bancaire</option>
+                <option value="virement">🏦 Virement</option>
+                <option value="cheque">📄 Chèque</option>
+                <option value="especes">💵 Espèces</option>
+              </select>
+            </div>
             {clientFile.quoted_price != null && (
               <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
                 Solde restant après saisie : <span className="font-bold text-orange-600">
@@ -632,6 +657,18 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
                   {clientFile.amount_paid ? `${clientFile.amount_paid.toLocaleString('fr-FR')} €` : '0 €'}
                 </p>
               </div>
+              {clientFile.payment_method && (
+                <div className="col-span-2">
+                  <p className="text-sm text-gray-500 mb-1">Mode de paiement</p>
+                  <p className="font-medium text-gray-900">
+                    {clientFile.payment_method === 'cb' ? '💳 Carte bancaire' :
+                     clientFile.payment_method === 'virement' ? '🏦 Virement' :
+                     clientFile.payment_method === 'cheque' ? '📄 Chèque' :
+                     clientFile.payment_method === 'especes' ? '💵 Espèces' :
+                     clientFile.payment_method}
+                  </p>
+                </div>
+              )}
               {clientFile.quoted_price != null && (
                 <div className="col-span-2">
                   <p className="text-sm text-gray-500 mb-1">Solde restant</p>

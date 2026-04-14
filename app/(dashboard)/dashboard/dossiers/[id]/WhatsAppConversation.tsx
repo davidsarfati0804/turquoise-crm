@@ -102,6 +102,10 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
   const [applying,           setApplying]           = useState(false)
   const [applySuccess,       setApplySuccess]       = useState(false)
 
+  // ── State sélection messages pour auto-fill ──────────────────────────────────
+  const [msgSelectMode,    setMsgSelectMode]    = useState(false)
+  const [selectedMsgIds,   setSelectedMsgIds]   = useState<Set<string>>(new Set())
+
   // ── Scroll to bottom ────────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -338,11 +342,19 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
     setDetectionError(null)
     setDetectionSelection(new Set())
     setApplySuccess(false)
+    setMsgSelectMode(false)
     try {
+      const body: { phone: string; dossierId?: string; messageIds?: string[] } = {
+        phone: normalizedPhone,
+        dossierId: clientFile?.id,
+      }
+      if (selectedMsgIds.size > 0) {
+        body.messageIds = Array.from(selectedMsgIds)
+      }
       const res = await fetch('/api/whatsapp/extract-dossier', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalizedPhone, dossierId: clientFile?.id }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (data.error) { setDetectionError(data.error); return }
@@ -366,7 +378,7 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
     } finally {
       setDetecting(false)
     }
-  }, [normalizedPhone, detecting, clientFile?.id])
+  }, [normalizedPhone, detecting, clientFile?.id, selectedMsgIds])
 
   const handleApply = useCallback(async () => {
     if (!detection || applying || !clientFile?.id) return
@@ -436,17 +448,31 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
         <span className="text-xs font-medium px-2 py-1 rounded-full bg-white/10 text-white/80">
           {messages.length} msg
         </span>
+        {/* Bouton sélection messages */}
+        {!detection && (
+          <button
+            onClick={() => { setMsgSelectMode(m => !m); if (msgSelectMode) setSelectedMsgIds(new Set()) }}
+            title={msgSelectMode ? 'Annuler la sélection' : 'Sélectionner des messages pour auto-fill'}
+            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              msgSelectMode ? 'bg-amber-300 text-amber-900' : 'bg-white/10 hover:bg-white/20 text-white/80'
+            }`}
+          >
+            {msgSelectMode
+              ? (selectedMsgIds.size > 0 ? `${selectedMsgIds.size} sél.` : 'Sélectionner')
+              : 'Choisir msgs'}
+          </button>
+        )}
         {/* Bouton auto-détection */}
         <button
           onClick={() => detection ? (setDetection(null), setDetectionSelection(new Set())) : handleDetect()}
           disabled={detecting}
-          title={detection ? 'Fermer la détection' : 'Détecter les infos du dossier'}
+          title={detection ? 'Fermer la détection' : selectedMsgIds.size > 0 ? `Auto-fill (${selectedMsgIds.size} messages sélectionnés)` : 'Détecter les infos du dossier'}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
-            detection ? 'bg-amber-400 text-amber-900' : 'bg-white/15 hover:bg-white/25 text-white'
+            detection ? 'bg-amber-400 text-amber-900' : selectedMsgIds.size > 0 ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-white/15 hover:bg-white/25 text-white'
           }`}
         >
           {detecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-          {detecting ? 'Détection…' : detection ? 'Fermer' : 'Auto-fill'}
+          {detecting ? 'Détection…' : detection ? 'Fermer' : selectedMsgIds.size > 0 ? `Auto-fill (${selectedMsgIds.size})` : 'Auto-fill'}
         </button>
       </div>
 
@@ -463,9 +489,23 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
           </div>
         ) : (
           messages.map(msg => (
-            <div key={msg.id} className={'flex mb-1 ' + (msg.direction === 'outbound' ? 'justify-end' : 'justify-start')}>
+            <div key={msg.id}
+              className={'flex mb-1 items-end gap-1.5 ' + (msg.direction === 'outbound' ? 'justify-end' : 'justify-start')}
+              onClick={msgSelectMode ? () => {
+                setSelectedMsgIds(prev => {
+                  const n = new Set(prev)
+                  n.has(msg.id) ? n.delete(msg.id) : n.add(msg.id)
+                  return n
+                })
+              } : undefined}
+              style={msgSelectMode ? { cursor: 'pointer' } : undefined}
+            >
+              {msgSelectMode && msg.direction === 'inbound' && (
+                <input type="checkbox" readOnly checked={selectedMsgIds.has(msg.id)}
+                  className="mb-2 accent-amber-500 flex-shrink-0 w-4 h-4 pointer-events-none" />
+              )}
               <div
-                className={'max-w-[65%] shadow-sm text-sm ' + (msg.id.startsWith('opt_') ? 'opacity-60' : '')}
+                className={'max-w-[65%] shadow-sm text-sm ' + (msg.id.startsWith('opt_') ? 'opacity-60' : '') + (msgSelectMode && selectedMsgIds.has(msg.id) ? ' ring-2 ring-amber-400' : '')}
                 style={{
                   backgroundColor: msg.direction === 'outbound' ? WA_BUBBLE : '#ffffff',
                   borderRadius: msg.direction === 'outbound' ? '8px 8px 2px 8px' : '8px 8px 8px 2px',

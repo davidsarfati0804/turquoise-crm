@@ -5,7 +5,7 @@ export const leadSchema = z.object({
   source: z.enum(['whatsapp', 'phone', 'email', 'manual', 'other']),
   first_name: z.string().min(1, 'Le prénom est requis'),
   last_name: z.string().min(1, 'Le nom est requis'),
-  phone: z.string().min(1, 'Le téléphone est requis'),
+  phone: z.string().optional().or(z.literal('')),
   email: z.string().email().nullable().or(z.literal('')),
   adults_count: z.number().int().min(1).default(1),
   children_count: z.number().int().min(0).default(0),

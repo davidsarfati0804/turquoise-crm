@@ -437,13 +437,12 @@ export function LeadForm() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-            Téléphone *
+            Téléphone
           </label>
           <input
             type="tel"
             id="phone"
             name="phone"
-            required
             placeholder="+33 6 12 34 56 78"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 focus:border-transparent"
           />

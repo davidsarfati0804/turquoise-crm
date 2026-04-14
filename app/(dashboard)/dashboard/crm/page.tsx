@@ -16,8 +16,8 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
     .select(`
       id, file_reference, crm_status, payment_status, quoted_price, updated_at, created_at,
       primary_contact_first_name, primary_contact_last_name, primary_contact_phone,
-      adults_count, children_count, babies_count,
-      events (name, start_date),
+      adults_count, children_count, babies_count, event_id,
+      events (id, name, start_date),
       leads (first_name, last_name, phone),
       selected_room_type:selected_room_type_id(name)
     `)
@@ -27,6 +27,13 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
   if (error) {
     console.error('Error fetching client files:', error)
   }
+
+  // Charger les événements pour le filtre
+  const { data: events } = await supabase
+    .from('events')
+    .select('id, name')
+    .in('status', ['upcoming', 'active', 'draft'])
+    .order('start_date', { ascending: false })
 
   return (
     <div className="p-8">
@@ -62,7 +69,7 @@ export default async function CRMPage({ searchParams }: { searchParams: Promise<
       </div>
 
       {view === 'pipeline' ? (
-        <PipelineView clientFiles={clientFiles || []} />
+        <PipelineView clientFiles={clientFiles || []} events={events || []} />
       ) : (
         <div className="bg-white rounded-lg shadow">
           <div className="overflow-x-auto">

@@ -26,7 +26,7 @@ export const CRM_STATUS_LABELS: Record<string, string> = {
   inscription_en_cours: 'Inscription en cours',
   bulletin_pret: 'Bulletin prêt',
   valide: 'Validé',
-  paiement_en_attente: 'Paiement en attente',
+  paiement_en_attente: 'En cours de paiement',
   paye: 'Payé',
   annule: 'Annulé',
 }
