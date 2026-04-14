@@ -56,10 +56,6 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
   // — Commercial: réduction mode —
   const [reductionMode, setReductionMode] = useState<'euro' | 'percent'>('euro')
 
-  // — Paiement —
-  const [amountPaid, setAmountPaid] = useState<string>(clientFile.amount_paid?.toString() || '0')
-  const [paymentMethod, setPaymentMethod] = useState<string>(clientFile.payment_method || '')
-
   // Prix catalogue auto
   useEffect(() => {
     if (!roomTypeId || !clientFile.event_id) { setCataloguePrice(null); return }
@@ -137,15 +133,6 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
         nanny_name_2: nannyName2 || null,
         transfer_notes: transferNotes || null,
       }
-    } else if (section === 'paiement') {
-      const ap = parseFloat(amountPaid) || 0
-      const qp = clientFile.quoted_price || 0
-      updateData = {
-        amount_paid: ap,
-        balance_due: Math.max(0, qp - ap),
-        payment_status: ap >= qp && qp > 0 ? 'paid' : ap > 0 ? 'partial' : 'pending',
-        payment_method: paymentMethod || null,
-      }
     }
 
     const { error } = await supabase.from('client_files').update(updateData).eq('id', clientFile.id)
@@ -176,9 +163,6 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
       setNannyName(clientFile.nanny_name || '')
       setNannyName2(clientFile.nanny_name_2 || '')
       setTransferNotes(clientFile.transfer_notes || '')
-    } else if (section === 'paiement') {
-      setAmountPaid(clientFile.amount_paid?.toString() || '0')
-      setPaymentMethod(clientFile.payment_method || '')
     }
     setEditingSection(null)
   }
@@ -594,114 +578,10 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
                 {clientFile.babies_count ? ` ${clientFile.babies_count} bb.` : ''}
               </p>
             </div>
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Montant payé</p>
-              <p className="font-medium text-green-600">
-                {clientFile.amount_paid ? `${clientFile.amount_paid.toLocaleString('fr-FR')} €` : '0 €'}
-              </p>
-            </div>
-            {clientFile.quoted_price != null && (
-              <div className="col-span-2">
-                <p className="text-sm text-gray-500 mb-1">Solde restant</p>
-                <p className="font-medium text-orange-600">
-                  {((clientFile.quoted_price || 0) - (clientFile.amount_paid || 0)).toLocaleString('fr-FR')} €
-                </p>
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      {/* ── Paiement ── */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <SectionHeader section="paiement" emoji="💳" title="Paiement" />
-        {editingSection === 'paiement' ? (
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm text-gray-500 mb-1 block">Montant encaissé (€)</label>
-              <input type="number" step="0.01" min="0" value={amountPaid}
-                onChange={e => setAmountPaid(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 text-sm" />
-            </div>
-            <div>
-              <label className="text-sm text-gray-500 mb-1 block">Mode de paiement</label>
-              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-turquoise-500 text-sm">
-                <option value="">-- Non renseigné --</option>
-                <option value="cb">💳 Carte bancaire</option>
-                <option value="virement">🏦 Virement</option>
-                <option value="cheque">📄 Chèque</option>
-                <option value="especes">💵 Espèces</option>
-              </select>
-            </div>
-            {clientFile.quoted_price != null && (
-              <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
-                Solde restant après saisie : <span className="font-bold text-orange-600">
-                  {Math.max(0, (clientFile.quoted_price || 0) - (parseFloat(amountPaid) || 0)).toLocaleString('fr-FR')} €
-                </span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Total</p>
-                <p className="text-lg font-bold text-gray-900">
-                  {clientFile.quoted_price != null ? `${Number(clientFile.quoted_price).toLocaleString('fr-FR')} €` : '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Encaissé</p>
-                <p className="text-lg font-bold text-green-600">
-                  {clientFile.amount_paid ? `${clientFile.amount_paid.toLocaleString('fr-FR')} €` : '0 €'}
-                </p>
-              </div>
-              {clientFile.payment_method && (
-                <div className="col-span-2">
-                  <p className="text-sm text-gray-500 mb-1">Mode de paiement</p>
-                  <p className="font-medium text-gray-900">
-                    {clientFile.payment_method === 'cb' ? '💳 Carte bancaire' :
-                     clientFile.payment_method === 'virement' ? '🏦 Virement' :
-                     clientFile.payment_method === 'cheque' ? '📄 Chèque' :
-                     clientFile.payment_method === 'especes' ? '💵 Espèces' :
-                     clientFile.payment_method}
-                  </p>
-                </div>
-              )}
-              {clientFile.quoted_price != null && (
-                <div className="col-span-2">
-                  <p className="text-sm text-gray-500 mb-1">Solde restant</p>
-                  <p className={`text-lg font-bold ${((clientFile.quoted_price || 0) - (clientFile.amount_paid || 0)) <= 0 ? 'text-green-600' : 'text-orange-600'}`}>
-                    {Math.max(0, (clientFile.quoted_price || 0) - (clientFile.amount_paid || 0)).toLocaleString('fr-FR')} €
-                  </p>
-                </div>
-              )}
-            </div>
-            {clientFile.payment_links?.length > 0 && (
-              <div className="border-t border-gray-100 pt-3 space-y-2">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Liens de paiement</p>
-                {clientFile.payment_links.map((link: any) => (
-                  <div key={link.id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3">
-                    <span className="font-medium text-gray-900 text-sm">{link.amount.toLocaleString('fr-FR')} €</span>
-                    <div className="flex items-center gap-2">
-                      {link.payment_link && (
-                        <a href={link.payment_link} target="_blank" rel="noopener noreferrer"
-                          className="text-xs text-turquoise-600 hover:underline">Voir →</a>
-                      )}
-                      <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
-                        link.status === 'paid' ? 'bg-green-100 text-green-800' :
-                        link.status === 'sent' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>{link.status}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </>
   )
 }

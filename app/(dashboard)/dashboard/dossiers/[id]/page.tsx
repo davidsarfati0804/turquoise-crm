@@ -11,6 +11,7 @@ import { BIGenerator } from './BIGenerator'
 import { EditableDossierSections } from './EditableDossierSections'
 import { ManageDossierActions } from './ManageDossierActions'
 import { WhatsAppConversation } from './WhatsAppConversation'
+import { PaymentEntriesSection } from './PaymentEntriesSection'
 
 export default async function DossierDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
@@ -27,6 +28,7 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
       flight_outbound:flight_id_outbound(id, airline, flight_number, flight_type, origin, destination, scheduled_time),
       participants (*),
       payment_links (*),
+      payment_entries (*),
       internal_notes (*)
     `)
     .eq('id', id)
@@ -114,8 +116,14 @@ export default async function DossierDetailPage({ params }: { params: Promise<{ 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Colonne gauche - Contenu principal (60%) */}
         <div className="lg:col-span-3 space-y-6">
-          {/* Contact + Vols + Séjour + Commercial + Paiement (inline editable) */}
+          {/* Contact + Vols + Séjour + Commercial (inline editable) */}
           <EditableDossierSections clientFile={clientFile} roomTypes={roomTypes || []} referenceFlights={referenceFlights || []} />
+
+          {/* Paiement — versements */}
+          <PaymentEntriesSection
+            clientFile={clientFile}
+            initialEntries={(clientFile as any).payment_entries || []}
+          />
 
           {/* Participants */}
           <ParticipantsSection clientFile={clientFile} />
