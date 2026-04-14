@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
         id, name, arrival_date, departure_date, ceremony_date,
         event_room_pricing (
           price_per_night,
-          room_types ( code, name )
+          room_types ( code, name, surface_m2 )
         )
       )
     `)
@@ -153,6 +153,13 @@ export async function POST(req: NextRequest) {
   } else {
     content = content.replace(/{{options_chambres}}/g, '');
   }
+
+  // Résoudre {{surface_chambre}} — m² de la chambre sélectionnée
+  const selectedRoomType = selectedPricing?.room_types;
+  content = content.replace(/{{surface_chambre}}/g, selectedRoomType?.surface_m2 != null ? String(selectedRoomType.surface_m2) : '[surface à définir]');
+
+  // Résoudre {{prix_total}} — montant total du dossier
+  content = content.replace(/{{prix_total}}/g, cf?.quoted_price != null ? `${Number(cf.quoted_price).toLocaleString('fr-FR')}€` : '[montant à définir]');
 
   // Résoudre {{nom_agent}} — depuis le profil utilisateur
   content = content.replace(/{{nom_agent}}/g, 'Aurélia');

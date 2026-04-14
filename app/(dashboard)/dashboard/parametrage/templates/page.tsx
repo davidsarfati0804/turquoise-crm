@@ -22,6 +22,8 @@ const VARIABLES = [
   { key: '{{prix_nuit}}', desc: 'Prix/nuit de la chambre principale' },
   { key: '{{liste_chambres}}', desc: 'Liste complète des chambres avec prix' },
   { key: '{{options_chambres}}', desc: 'Options d\'upgrades avec supplément' },
+  { key: '{{surface_chambre}}', desc: 'Surface en m² de la chambre sélectionnée' },
+  { key: '{{prix_total}}', desc: 'Montant total du dossier (quoted_price)' },
   { key: '{{nom_agent}}', desc: 'Nom de l\'agent (Aurélia)' },
 ]
 

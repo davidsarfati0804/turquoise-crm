@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Settings, Hotel, Globe, Building, Calendar } from 'lucide-react'
+import { Settings, Hotel, Globe, Building, Calendar, Pencil, Check, X, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
 interface ParametresClientProps {
   roomTypes: any[]
@@ -10,9 +12,39 @@ interface ParametresClientProps {
   events: any[]
 }
 
-export default function ParametresClient({ roomTypes, destinations, events }: ParametresClientProps) {
+export default function ParametresClient({ roomTypes: initialRoomTypes, destinations, events }: ParametresClientProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const [roomTypes, setRoomTypes] = useState(initialRoomTypes)
+  const [editingRoom, setEditingRoom] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<{ name: string; surface_m2: string }>({ name: '', surface_m2: '' })
+  const [savingRoom, setSavingRoom] = useState(false)
+
+  const startEdit = (room: any) => {
+    setEditingRoom(room.id)
+    setEditForm({ name: room.name || '', surface_m2: room.surface_m2 != null ? String(room.surface_m2) : '' })
+  }
+
+  const cancelEdit = () => {
+    setEditingRoom(null)
+  }
+
+  const saveRoom = async (roomId: string) => {
+    setSavingRoom(true)
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('room_types')
+      .update({
+        name: editForm.name,
+        surface_m2: editForm.surface_m2 !== '' ? parseInt(editForm.surface_m2, 10) : null,
+      })
+      .eq('id', roomId)
+    if (!error) {
+      setRoomTypes(prev => prev.map(r => r.id === roomId ? { ...r, name: editForm.name, surface_m2: editForm.surface_m2 !== '' ? parseInt(editForm.surface_m2, 10) : null } : r))
+      setEditingRoom(null)
+    }
+    setSavingRoom(false)
+  }
   const tab = searchParams.get('tab') || 'general'
 
   const tabs = [
@@ -92,18 +124,63 @@ export default function ParametresClient({ roomTypes, destinations, events }: Pa
               {roomTypes && roomTypes.length > 0 ? (
                 <div className="space-y-3">
                   {roomTypes.map((room: any) => (
-                    <div key={room.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
-                      <div>
-                        <p className="font-medium text-gray-900">{room.name}</p>
-                        {room.description && (
-                          <p className="text-sm text-gray-500">{room.description}</p>
-                        )}
-                      </div>
-                      <p className="font-semibold text-turquoise-600">
-                        {room.price_per_night
-                          ? `${new Intl.NumberFormat('fr-FR').format(room.price_per_night)}€/nuit`
-                          : '—'}
-                      </p>
+                    <div key={room.id} className="bg-gray-50 rounded-lg px-4 py-3">
+                      {editingRoom === room.id ? (
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              value={editForm.name}
+                              onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+                              placeholder="Nom de la chambre"
+                              className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-turquoise-500"
+                            />
+                            <input
+                              value={editForm.surface_m2}
+                              onChange={e => setEditForm(p => ({ ...p, surface_m2: e.target.value }))}
+                              placeholder="m²"
+                              type="number"
+                              min="0"
+                              className="w-20 px-3 py-1.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-turquoise-500"
+                            />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button onClick={cancelEdit} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
+                              <X className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => saveRoom(room.id)}
+                              disabled={savingRoom}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-turquoise-600 hover:bg-turquoise-700 text-white rounded-lg text-xs font-medium disabled:opacity-50"
+                            >
+                              {savingRoom ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                              Enregistrer
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900">{room.name}</p>
+                            <div className="flex gap-3 text-xs text-gray-500 mt-0.5">
+                              {room.surface_m2 != null && <span>{room.surface_m2} m²</span>}
+                              {room.description && <span>{room.description}</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-turquoise-600 text-sm">
+                              {room.price_per_night
+                                ? `${new Intl.NumberFormat('fr-FR').format(room.price_per_night)}€/nuit`
+                                : '—'}
+                            </p>
+                            <button
+                              onClick={() => startEdit(room)}
+                              className="p-1.5 text-gray-400 hover:text-turquoise-600 hover:bg-turquoise-50 rounded-lg transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
