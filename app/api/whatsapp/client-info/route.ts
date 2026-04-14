@@ -40,6 +40,8 @@ export async function GET(req: NextRequest) {
   const orPhone = variants.map(v => `phone.eq.${v}`).join(',');
   const orCfPhone = variants.map(v => `primary_contact_phone.eq.${v}`).join(',');
 
+  const dossierSelect = 'id, file_reference, primary_contact_first_name, primary_contact_last_name, crm_status, payment_status, quoted_price, amount_paid, created_at, event_id, events(name, start_date)';
+
   const [leadResult, dossiersResult] = await Promise.all([
     supabase
       .from('leads')
@@ -50,13 +52,33 @@ export async function GET(req: NextRequest) {
 
     supabase
       .from('client_files')
-      .select('id, file_reference, primary_contact_first_name, primary_contact_last_name, crm_status, payment_status, quoted_price, amount_paid, created_at, event_id, events(name, start_date)')
+      .select(dossierSelect)
       .or(orCfPhone)
       .order('created_at', { ascending: false })
       .limit(20),
   ]);
 
-  const isKnown = (leadResult.data?.length ?? 0) > 0 || (dossiersResult.data?.length ?? 0) > 0;
+  // If any lead was converted to a dossier, also fetch that dossier by ID
+  // (phone format in client_files may differ from WhatsApp phone/LID)
+  const convertedFileIds = (leadResult.data ?? [])
+    .map(l => l.converted_to_file_id)
+    .filter(Boolean) as string[];
+
+  let dossiers = dossiersResult.data ?? [];
+
+  if (convertedFileIds.length > 0) {
+    const existingIds = new Set(dossiers.map(d => d.id));
+    const missingIds = convertedFileIds.filter(id => !existingIds.has(id));
+    if (missingIds.length > 0) {
+      const { data: linked } = await supabase
+        .from('client_files')
+        .select(dossierSelect)
+        .in('id', missingIds);
+      dossiers = [...dossiers, ...(linked ?? [])];
+    }
+  }
+
+  const isKnown = (leadResult.data?.length ?? 0) > 0 || dossiers.length > 0;
 
   // Si aucun match par téléphone et qu'on a un nom WhatsApp → chercher par similarité de nom
   let nameSuggestions: {
@@ -131,7 +153,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     leads: leadResult.data ?? [],
-    dossiers: dossiersResult.data ?? [],
+    dossiers,
     isKnown,
     nameSuggestions,
   });
