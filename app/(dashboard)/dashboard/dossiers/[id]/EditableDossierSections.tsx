@@ -144,7 +144,8 @@ export function EditableDossierSections({ clientFile, roomTypes, referenceFlight
     if (section === 'contact') {
       setFirstName(clientFile.primary_contact_first_name || '')
       setLastName(clientFile.primary_contact_last_name || '')
-      setPhone(clientFile.primary_contact_phone || '')
+      const rawPhone = clientFile.primary_contact_phone || ''
+      setPhone(rawPhone.startsWith('lid:') ? '' : rawPhone)
       setEmail(clientFile.primary_contact_email || '')
     } else if (section === 'commercial') {
       setRoomTypeId(clientFile.selected_room_type_id || '')

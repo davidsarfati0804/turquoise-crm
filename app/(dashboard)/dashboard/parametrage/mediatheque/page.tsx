@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Upload, Trash2, Loader2, Image as ImageIcon, Video, FileText, FolderOpen } from 'lucide-react'
+import { Upload, Trash2, Loader2, Image as ImageIcon, Video, FileText, FolderOpen, Pencil, Check, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 interface MediaFile {
@@ -10,6 +10,11 @@ interface MediaFile {
   url: string
   type: string
   size?: number
+}
+
+/** Retire le préfixe timestamp pour l'affichage : "1775997006576-Turquoise.mp4" → "Turquoise.mp4" */
+function displayName(name: string): string {
+  return name.replace(/^\d+-/, '')
 }
 
 const BUCKET = 'media-library'
@@ -24,6 +29,9 @@ export default function MediathequePage() {
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [renamingPath, setRenamingPath] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameSaving, setRenameSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
@@ -73,6 +81,33 @@ export default function MediathequePage() {
     setUploading(false)
     if (inputRef.current) inputRef.current.value = ''
     await load(folder)
+  }
+
+  const startRename = (f: MediaFile) => {
+    setRenamingPath(f.path)
+    setRenameValue(displayName(f.name))
+  }
+
+  const handleRename = async (f: MediaFile) => {
+    if (!renameValue.trim() || renameSaving) return
+    setRenameSaving(true)
+    try {
+      const res = await fetch('/api/whatsapp/media-library', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPath: f.path, newName: renameValue.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Erreur renommage'); return }
+      setFiles(prev => prev.map(file =>
+        file.path === f.path
+          ? { ...file, name: data.name, path: data.path, url: data.url }
+          : file
+      ))
+      setRenamingPath(null)
+    } finally {
+      setRenameSaving(false)
+    }
   }
 
   const handleDelete = async (path: string) => {
@@ -147,32 +182,62 @@ export default function MediathequePage() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {files.map(f => (
-            <div key={f.path} className="group relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50 aspect-square">
-              {f.type === 'video' ? (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gray-800">
-                  <Video className="w-8 h-8 text-white" />
-                  <span className="text-[10px] text-gray-300 px-2 truncate w-full text-center">{f.name}</span>
-                  {f.size && <span className="text-[9px] text-gray-500">{(f.size / 1024 / 1024).toFixed(1)} Mo</span>}
+            <div key={f.path} className="group relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50 flex flex-col">
+              {/* Thumbnail */}
+              <div className="relative aspect-square overflow-hidden">
+                {f.type === 'video' ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gray-800">
+                    <Video className="w-8 h-8 text-white" />
+                    {f.size && <span className="text-[9px] text-gray-500">{(f.size / 1024 / 1024).toFixed(1)} Mo</span>}
+                  </div>
+                ) : f.type === 'document' ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                    <FileText className="w-8 h-8 text-gray-400" />
+                  </div>
+                ) : (
+                  <img src={f.url} alt={displayName(f.name)} className="w-full h-full object-cover" />
+                )}
+                {/* Hover overlay with delete */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                  <button
+                    onClick={() => handleDelete(f.path)}
+                    disabled={deleting === f.path}
+                    className="opacity-0 group-hover:opacity-100 w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white transition-all"
+                  >
+                    {deleting === f.path ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </button>
                 </div>
-              ) : f.type === 'document' ? (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-1">
-                  <FileText className="w-8 h-8 text-gray-400" />
-                  <span className="text-[10px] text-gray-500 px-2 truncate w-full text-center">{f.name}</span>
-                </div>
-              ) : (
-                <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
-              )}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                <button
-                  onClick={() => handleDelete(f.path)}
-                  disabled={deleting === f.path}
-                  className="opacity-0 group-hover:opacity-100 w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white transition-all"
-                >
-                  {deleting === f.path ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                </button>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <p className="text-[10px] text-white truncate">{f.name}</p>
+              {/* Name row with rename */}
+              <div className="px-2 py-1.5 flex items-center gap-1 min-h-[28px]">
+                {renamingPath === f.path ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleRename(f); if (e.key === 'Escape') setRenamingPath(null) }}
+                      className="flex-1 text-[11px] border border-teal-400 rounded px-1 py-0.5 outline-none min-w-0"
+                    />
+                    <button onClick={() => handleRename(f)} disabled={renameSaving} className="text-teal-600 hover:text-teal-800 flex-shrink-0">
+                      {renameSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    </button>
+                    <button onClick={() => setRenamingPath(null)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-[11px] text-gray-600 truncate" title={displayName(f.name)}>{displayName(f.name)}</span>
+                    <button
+                      onClick={() => startRename(f)}
+                      className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-teal-600 flex-shrink-0 transition-opacity"
+                      title="Renommer"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}

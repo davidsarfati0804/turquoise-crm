@@ -30,6 +30,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
   const [signatureStatus, setSignatureStatus] = useState<string | null>(null)
   const [signerUrl, setSignerUrl] = useState<string | null>(null)
   const [showSignatureModal, setShowSignatureModal] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
 
   // Charger le dernier BI existant au montage
   useEffect(() => {
@@ -61,6 +62,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
     setGenerating(true)
     setPdfUrl(null)
     setGoogleDocUrl(null)
+    setPdfError(null)
     try {
       const supabase = createClient()
 
@@ -216,7 +218,7 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
 
     } catch (error) {
       console.error('Error generating BI:', error)
-      alert(error instanceof Error ? error.message : 'Erreur lors de la génération du BI')
+      setPdfError(error instanceof Error ? error.message : 'Erreur lors de la génération du BI')
     } finally {
       setGenerating(false)
     }
@@ -422,6 +424,15 @@ export function BIGenerator({ clientFile }: BIGeneratorProps) {
               </button>
             </div>
           </div>
+
+          {/* PDF Generation Error */}
+          {pdfError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="font-semibold text-red-800 text-sm">❌ Erreur génération PDF</p>
+              <p className="text-sm text-red-700 mt-1 font-mono whitespace-pre-wrap">{pdfError}</p>
+              <p className="text-xs text-red-500 mt-2">Vérifiez les variables d'environnement Google (GOOGLE_DOCS_BI_TEMPLATE_ID, GOOGLE_CLIENT_ID, etc.) dans Netlify.</p>
+            </div>
+          )}
 
           {/* PDF Preview from Google Docs */}
           {showPreview && pdfUrl && (

@@ -71,6 +71,38 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, url: publicUrl, path });
 }
 
+/** PATCH /api/whatsapp/media-library — renommer un fichier */
+export async function PATCH(req: NextRequest) {
+  const body = await req.json() as { oldPath: string; newName: string };
+  const { oldPath, newName } = body;
+  if (!oldPath || !newName) return NextResponse.json({ error: 'oldPath et newName requis' }, { status: 400 });
+
+  // Extraire le dossier depuis l'ancien chemin
+  const parts = oldPath.split('/');
+  const folder = parts.slice(0, -1).join('/');
+  const ext = oldPath.split('.').pop() || '';
+  const safeName = newName.replace(/[^a-zA-Z0-9._\-\s]/g, '_').trim();
+  const newPath = folder ? `${folder}/${safeName}` : safeName;
+
+  // Télécharger le fichier existant
+  const { data: fileData, error: downloadError } = await supabase.storage.from(BUCKET).download(oldPath);
+  if (downloadError || !fileData) return NextResponse.json({ error: 'Fichier introuvable' }, { status: 404 });
+
+  // Re-uploader avec le nouveau nom
+  const arrayBuffer = await fileData.arrayBuffer();
+  const { error: uploadError } = await supabase.storage.from(BUCKET).upload(newPath, arrayBuffer, {
+    contentType: fileData.type,
+    upsert: false,
+  });
+  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
+
+  // Supprimer l'ancien fichier
+  await supabase.storage.from(BUCKET).remove([oldPath]);
+
+  const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(newPath);
+  return NextResponse.json({ ok: true, path: newPath, url: publicUrl, name: safeName });
+}
+
 /** DELETE /api/whatsapp/media-library?path=folder/file.jpg */
 export async function DELETE(req: NextRequest) {
   const path = req.nextUrl.searchParams.get('path');

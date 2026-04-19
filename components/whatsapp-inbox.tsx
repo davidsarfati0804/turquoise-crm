@@ -691,6 +691,7 @@ export function WhatsAppInbox() {
         const leadId = linkedMsg?.lead_id ?? linkedMsgLead?.lead_id;
 
         // 2. Stocker le LID sur l'entité + mettre à jour le vrai numéro
+        // Les messages restent liés au LID via client_file_id — on ne touche JAMAIS wa_phone_number
         if (clientFileId) {
           await supabase.from('client_files')
             .update({ whatsapp_lid: oldPhone, primary_contact_phone: newPhone })
@@ -702,14 +703,9 @@ export function WhatsAppInbox() {
             .eq('id', leadId);
         }
 
-        // 3. Migrer tous les messages LID vers le vrai numéro
-        await supabase.from('whatsapp_messages')
-          .update({ wa_phone_number: newPhone })
-          .eq('wa_phone_number', oldPhone);
-
       } else {
-        // ── Correction d'un vrai numéro ───────────────────────────────────────
-        await supabase.from('whatsapp_messages').update({ wa_phone_number: newPhone }).eq('wa_phone_number', oldPhone);
+        // ── Correction d'un vrai numéro — téléphone symbolique uniquement ─────
+        // Ne jamais migrer les messages : la connexion est via client_file_id, pas le numéro
         await supabase.from('client_files').update({ primary_contact_phone: newPhone }).eq('primary_contact_phone', oldPhone);
         await supabase.from('leads').update({ phone: newPhone }).eq('phone', oldPhone);
       }
@@ -881,7 +877,7 @@ export function WhatsAppInbox() {
       await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber: selectedPhone, message: file.name, mediaUrl: file.url, mediaType }),
+        body: JSON.stringify({ phoneNumber: selectedPhone, mediaUrl: file.url, mediaType }),
       });
     } catch {
       setMessages(prev => prev.filter(m => m.id !== optId));
@@ -1960,15 +1956,15 @@ export function WhatsAppInbox() {
                                 {f.type === 'video' ? (
                                   <div className="w-full h-full flex items-center justify-center bg-gray-800">
                                     <Video className="w-6 h-6 text-white" />
-                                    <span className="absolute bottom-1 left-1 right-1 text-[9px] text-white truncate bg-black/50 px-1 rounded">{f.name}</span>
+                                    <span className="absolute bottom-1 left-1 right-1 text-[9px] text-white truncate bg-black/50 px-1 rounded">{f.name.replace(/^\d+-/, '')}</span>
                                   </div>
                                 ) : f.type === 'document' ? (
                                   <div className="w-full h-full flex items-center justify-center flex-col gap-1">
                                     <FileText className="w-6 h-6 text-gray-400" />
-                                    <span className="text-[9px] text-gray-500 truncate px-1 w-full text-center">{f.name}</span>
+                                    <span className="text-[9px] text-gray-500 truncate px-1 w-full text-center">{f.name.replace(/^\d+-/, '')}</span>
                                   </div>
                                 ) : (
-                                  <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
+                                  <img src={f.url} alt={f.name.replace(/^\d+-/, '')} className="w-full h-full object-cover" />
                                 )}
                                 {sendingMedia === f.url && (
                                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center">

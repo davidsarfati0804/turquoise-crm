@@ -300,7 +300,6 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
           phoneNumber: normalizedPhone,
           mediaUrl: file.url,
           mediaType: file.type,
-          caption: file.name,
           clientFileId: clientFile?.id,
         }),
       })
@@ -805,10 +804,10 @@ export function WhatsAppConversation({ clientFile }: { clientFile: any }) {
                           ) : f.type === 'document' ? (
                             <div className="w-full h-full flex items-center justify-center flex-col gap-1">
                               <FileText className="w-6 h-6 text-gray-400" />
-                              <span className="text-[9px] text-gray-500 truncate px-1 w-full text-center">{f.name}</span>
+                              <span className="text-[9px] text-gray-500 truncate px-1 w-full text-center">{f.name.replace(/^\d+-/, '')}</span>
                             </div>
                           ) : (
-                            <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
+                            <img src={f.url} alt={f.name.replace(/^\d+-/, '')} className="w-full h-full object-cover" />
                           )}
                           {sendingMedia === f.url && (
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
